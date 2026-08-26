@@ -100,18 +100,24 @@ class ExecutionGateway:
         self.controller.assert_skill_allowed("skill-virtual-matching-engine")
         if not order.client_order_id:
             raise ValueError("client_order_id is required for idempotent execution")
-        record = OrderRecord(order.client_order_id, order.symbol, order.side.value, order.quantity)
         existing = self.lifecycle.get(order.client_order_id)
         if existing is not None:
-            if existing.symbol != record.symbol or existing.side != record.side or existing.quantity != record.quantity:
+            if existing.symbol != order.symbol or existing.side != order.side.value or existing.quantity != order.quantity:
                 raise ValueError("client_order_id already used with different order")
             if existing.status in {OrderStatus.FILLED, OrderStatus.CANCELED, OrderStatus.REJECTED}:
                 return Fill(order.client_order_id, order.symbol, order.side, existing.filled_quantity, market_price, Decimal("0"), Decimal("0"), existing.status.value)
+            remaining = order.quantity - existing.filled_quantity
+            if remaining <= 0:
+                return Fill(order.client_order_id, order.symbol, order.side, existing.filled_quantity, market_price, Decimal("0"), Decimal("0"), existing.status.value)
+            effective_order = OrderRequest(order.symbol, order.side, remaining, order.order_type, order.limit_price, order.client_order_id)
         else:
-            self.lifecycle.submit(record)
-        fill = self.paper.execute(order, market_price, available_quantity)
+            self.lifecycle.submit(OrderRecord(order.client_order_id, order.symbol, order.side.value, order.quantity))
+            effective_order = order
+        fill = self.paper.execute(effective_order, market_price, available_quantity)
         if fill.quantity > 0:
-            self.lifecycle.fill(order.client_order_id, fill.quantity)
+            updated = self.lifecycle.fill(order.client_order_id, fill.quantity)
+            if updated.status is OrderStatus.FILLED and fill.status != "FILLED":
+                fill = Fill(fill.order_id, fill.symbol, fill.side, fill.quantity, fill.price, fill.fee, fill.tax, "FILLED")
         else:
             self.lifecycle.cancel(order.client_order_id)
         return fill
