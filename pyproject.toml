@@ -7,7 +7,7 @@ name = "paper-live"
 version = "0.1.0"
 description = "Agent and skill based paper trading runtime"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["langgraph>=0.6,<1"]
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
