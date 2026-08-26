@@ -1,7 +1,6 @@
 from __future__ import annotations
 import json, os, urllib.request
 from dataclasses import dataclass
-from decimal import Decimal
 from .protocol import BrokerAdapter, OrderRequest, OrderResult
 
 BASE_URL = "https://developer.kbsec.com:32484"
@@ -48,12 +47,11 @@ class KbBrokerAdapter(BrokerAdapter):
             raise KbApiError(str(exc)) from exc
 
     def submit(self, request: OrderRequest) -> OrderResult:
-        # KB's public guide confirms ssqm1802 as an order endpoint, but the
-        # downloadable API schema is authoritative for exact body field names.
-        # Keep the broker-specific mapping isolated until that schema is pinned.
-        body = {"dataHeader": {}, "dataBody": {"symbol": request.symbol, "side": request.side, "quantity": str(request.quantity), "orderType": request.order_type}}
-        response = self._request("POST", self.credentials.order_path, body)
-        return OrderResult(self.name, str(response.get("orderId") or response.get("dataBody", {}).get("orderId", "")), True)
+        # The public KB guide identifies ssqm1802 as an order endpoint, but
+        # explicitly states that the detailed request fields are finalized by
+        # the official API specification. Do not guess field mappings in a
+        # live-trading adapter. The pinned KB JSON schema must supply them.
+        raise NotImplementedError("KB order mapping is blocked until the official JSON API schema is pinned")
 
     def cancel(self, order_id: str) -> bool:
         raise NotImplementedError("KB cancel endpoint must be mapped from the pinned KB API schema")
