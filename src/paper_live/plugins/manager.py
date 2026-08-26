@@ -28,9 +28,14 @@ class PluginManager:
         manifest_path = Path(installed.path) / "plugin.yaml"
         manifest = load_manifest(yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {})
         self.lifecycle.add(PluginRecord(installed.plugin_id, installed.version, installed.commit, installed.artifact_sha256))
-        self.lifecycle.verify(plugin_id)
-        self.register_verified(manifest)
-        self.lifecycle.enable(plugin_id)
+        try:
+            self.lifecycle.verify(plugin_id)
+            self.register_verified(manifest)
+            self.lifecycle.enable(plugin_id)
+        except Exception:
+            self.registry.unregister_plugin(plugin_id)
+            self.lifecycle.remove(plugin_id)
+            raise
         return installed
 
     def disable(self, plugin_id: str) -> None:
