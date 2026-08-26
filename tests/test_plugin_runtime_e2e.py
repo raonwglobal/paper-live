@@ -5,7 +5,6 @@ from paper_live.order_lifecycle import OrderLifecycle
 from paper_live.plugins.executor import PluginSkillExecutor
 from paper_live.plugins.integration import PluginExecutionRequest, PluginRuntime
 from paper_live.plugins.lifecycle import PluginLifecycle, PluginRecord
-from paper_live.plugins.risk import *  # noqa: F401,F403
 from paper_live.plugins.skill_registry import RegisteredSkill, SkillRegistry
 from paper_live.risk import RiskGuardian
 
@@ -33,7 +32,7 @@ def test_plugin_signal_reaches_paper_only_through_risk_and_gateway():
 
 
 def test_plugin_live_is_rejected_before_execution():
-    env, account, runtime = build()
+    _, _, runtime = build()
     request = PluginExecutionRequest("demo", "signal.quote", ExecutionEnvironmentMode.REAL_LIVE)
     try:
         runtime.invoke(request)
