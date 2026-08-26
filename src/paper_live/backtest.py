@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Callable, Sequence
+from uuid import uuid4
 
 from .analytics import OHLCV, max_drawdown, sharpe_ratio
 from .execution import ExecutionGateway, OrderRequest, PaperAccount
@@ -30,6 +31,8 @@ class BacktestRunner:
         for i, candle in enumerate(candles):
             order = strategy(i, candles[:i + 1])
             if order is not None:
+                if not order.client_order_id:
+                    order = OrderRequest(order.symbol, order.side, order.quantity, order.order_type, order.limit_price, f"backtest-{i}-{uuid4().hex[:12]}")
                 self.gateway.execute(order, candle.close)
                 fills += 1
             position_value = sum((qty * candle.close for symbol, qty in self.account.positions.items()), Decimal("0"))
