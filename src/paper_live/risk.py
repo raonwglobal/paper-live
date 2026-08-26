@@ -54,10 +54,13 @@ class RiskGuardian:
             raise PermissionError("order notional exceeds risk limit")
         if self.daily_pnl <= -self.limits.max_daily_loss:
             raise PermissionError("daily loss limit exceeded")
+
+        current_position = self.account.positions.get(order.symbol, Decimal("0"))
+        projected = current_position + order.quantity if order.side == OrderSide.BUY else current_position - order.quantity
+        if projected < 0:
+            raise PermissionError("sell quantity exceeds current position")
+        if projected * reference_price > self.limits.max_position_notional:
+            raise PermissionError("position notional exceeds risk limit")
+
         if self.controller.get_current_mode() == ExecutionEnvironmentMode.REAL_LIVE:
             self.controller.assert_skill_allowed("skill-risk-circuit-breaker")
-
-        if order.side == OrderSide.SELL:
-            position = self.account.positions.get(order.symbol, Decimal("0"))
-            if position < order.quantity:
-                raise PermissionError("sell quantity exceeds current position")
