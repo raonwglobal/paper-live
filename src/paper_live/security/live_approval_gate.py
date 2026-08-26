@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import secrets
 
 class LiveApprovalDenied(PermissionError):
@@ -17,10 +17,10 @@ class LiveApprovalGate:
         self._approval: LiveApproval | None = None
 
     def approve(self, approved_by: str, ttl_seconds: int = 300) -> LiveApproval:
-        if not approved_by.strip():
-            raise LiveApprovalDenied("approver is required")
-        approval = LiveApproval(secrets.token_urlsafe(18), approved_by, datetime.now(timezone.utc).replace(microsecond=0))
-        object.__setattr__(approval, "expires_at", datetime.fromtimestamp(approval.expires_at.timestamp() + ttl_seconds, tz=timezone.utc))
+        if not approved_by.strip() or not 1 <= ttl_seconds <= 3600:
+            raise LiveApprovalDenied("valid approver and TTL are required")
+        now = datetime.now(timezone.utc)
+        approval = LiveApproval(secrets.token_urlsafe(18), approved_by.strip(), now + timedelta(seconds=ttl_seconds))
         self._approval = approval
         return approval
 
