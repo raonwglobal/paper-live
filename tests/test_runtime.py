@@ -14,7 +14,7 @@ from paper_live import (
     PaperAccount,
     VirtualMatchingEngine,
 )
-
+from paper_live.live_approval import LiveApprovalGate
 
 SECRET = "test-secret"
 TOKEN = hmac.new(SECRET.encode(), b"environment-transition", hashlib.sha256).hexdigest()
@@ -62,8 +62,10 @@ def test_paper_buy_and_sell_ledger():
 
 
 def test_gateway_refuses_live_execution():
-    c = controller()
+    gate = LiveApprovalGate()
+    gate.approve("test-operator", "gateway isolation test")
+    c = EnvironmentController(transition_secret=SECRET, live_approval_gate=gate)
     c.set_mode(ExecutionEnvironmentMode.REAL_LIVE, TOKEN)
     gateway = ExecutionGateway(c, VirtualMatchingEngine(PaperAccount(Decimal("100000"))))
     with pytest.raises(EnvironmentTransitionError):
-        gateway.execute(OrderRequest("005930", OrderSide.BUY, Decimal("1")), Decimal("7000"))
+        gateway.execute(OrderRequest("005930", OrderSide.BUY, Decimal("1"), client_order_id="live-test"), Decimal("7000"))
