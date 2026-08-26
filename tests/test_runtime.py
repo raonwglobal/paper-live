@@ -62,6 +62,7 @@ def test_paper_buy_and_sell_ledger():
 
 
 def test_gateway_refuses_live_execution():
+    # Explicit approval is required to enter REAL_LIVE; execution remains isolated.
     gate = LiveApprovalGate()
     gate.approve("test-operator", "gateway isolation test")
     c = EnvironmentController(transition_secret=SECRET, live_approval_gate=gate)
