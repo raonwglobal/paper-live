@@ -1,11 +1,13 @@
 from __future__ import annotations
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
 from .orchestrator_v2 import TradingGraph
 from .execution import ExecutionGateway, OrderRequest, OrderSide
+from .pnl import PortfolioLedger, Side
 from .risk import RiskGuardian
 from .reflection import EpisodicMemory, SelfReflectionWorker, TradeEpisode
 from .state_machine import CycleState
@@ -19,23 +21,24 @@ class PipelineResult:
     pnl: Decimal
 
 class TradingPipeline:
-    def __init__(self, gateway: ExecutionGateway, risk: RiskGuardian, memory: EpisodicMemory | None = None):
+    def __init__(self, gateway: ExecutionGateway, risk: RiskGuardian, memory: EpisodicMemory | None = None, ledger: PortfolioLedger | None = None):
         self.graph = TradingGraph()
         self.gateway = gateway
         self.risk = risk
+        self.ledger = ledger or PortfolioLedger()
         self.reflection = SelfReflectionWorker(memory or EpisodicMemory())
 
-    def _reflect(self, symbol: str, action: str, price: Decimal, pnl: Decimal, market: dict[str, Any]) -> None:
+    def _reflect(self, symbol: str, action: str, entry_price: Decimal, exit_price: Decimal, pnl: Decimal, market: dict[str, Any], outcome: str) -> None:
         episode = TradeEpisode(
             episode_id=str(uuid4()),
             symbol=symbol,
             action=action,
-            entry_price=str(price),
-            exit_price=str(price),
+            entry_price=str(entry_price),
+            exit_price=str(exit_price),
             pnl=str(pnl),
             decision_context=market,
-            outcome="EXECUTED" if pnl != 0 else "FLAT",
-            created_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+            outcome=outcome,
+            created_at=datetime.now(timezone.utc).isoformat(),
         )
         self.reflection.reflect(episode)
 
@@ -43,16 +46,20 @@ class TradingPipeline:
         result = self.graph.analyze(symbol, market)
         action = result.state.decision.get("action", "HOLD")
         if action == "HOLD":
-            self._reflect(symbol, action, price, Decimal("0"), market)
+            self._reflect(symbol, action, price, price, Decimal("0"), market, "HOLD")
             return PipelineResult(symbol, action, CycleState.REFLECTED, False, Decimal("0"))
         side = OrderSide.BUY if action == "BUY" else OrderSide.SELL
         order = OrderRequest(symbol, side, quantity, client_order_id=f"pipeline-{symbol}-{uuid4().hex[:8]}")
         try:
             self.risk.approve(order, price)
-            self.gateway.execute(order, price)
-            pnl = Decimal("0")
-            self._reflect(symbol, action, price, pnl, market)
+            fill = self.gateway.execute(order, price)
+            if fill.quantity <= 0 or fill.status == "REJECTED":
+                self._reflect(symbol, action, price, price, Decimal("0"), market, "REJECTED")
+                return PipelineResult(symbol, action, CycleState.REFLECTED, False, Decimal("0"))
+            self.ledger.apply_fill(symbol, Side.BUY if fill.side is OrderSide.BUY else Side.SELL, fill.quantity, fill.price)
+            pnl = self.ledger.total_pnl(symbol, fill.price)
+            self._reflect(symbol, action, fill.price, fill.price, pnl, market, fill.status)
             return PipelineResult(symbol, action, CycleState.REFLECTED, True, pnl)
         except (PermissionError, ValueError):
-            self._reflect(symbol, action, price, Decimal("0"), market)
+            self._reflect(symbol, action, price, price, Decimal("0"), market, "REJECTED")
             return PipelineResult(symbol, action, CycleState.REFLECTED, False, Decimal("0"))
