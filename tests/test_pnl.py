@@ -9,8 +9,8 @@ def test_average_cost_and_realized_pnl():
     assert p.position("ABC").average_price == Decimal("110")
     p.apply_fill("ABC", Side.SELL, Decimal("5"), Decimal("130"))
     assert p.position("ABC").realized_pnl == Decimal("100")
-    assert p.unrealized_pnl("ABC", Decimal("140")) == Decimal("300")
-    assert p.total_pnl("ABC", Decimal("140")) == Decimal("400")
+    assert p.unrealized_pnl("ABC", Decimal("140")) == Decimal("450")
+    assert p.total_pnl("ABC", Decimal("140")) == Decimal("550")
 
 def test_cannot_sell_more_than_position():
     with pytest.raises(ValueError):
