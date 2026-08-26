@@ -30,9 +30,9 @@ class PluginInstaller:
         self.validator = validator or PluginSecurityValidator()
 
     @staticmethod
-    def _tree_hash(directory: Path) -> str:
+    def _payload_hash(directory: Path) -> str:
         h = hashlib.sha256()
-        for p in sorted(x for x in directory.rglob("*") if x.is_file() and ".git" not in x.parts):
+        for p in sorted(x for x in directory.rglob("*") if x.is_file() and ".git" not in x.parts and x.name != "plugin.yaml"):
             h.update(str(p.relative_to(directory)).encode()); h.update(b"\0"); h.update(p.read_bytes())
         return h.hexdigest()
 
@@ -65,7 +65,7 @@ class PluginInstaller:
                 validate_package(dest)
             except PluginPackageError as exc:
                 raise PluginInstallError(str(exc)) from exc
-            digest = self._tree_hash(dest)
+            digest = self._payload_hash(dest)
             if manifest.sha256 and manifest.sha256 != digest:
                 raise PluginInstallError("artifact SHA-256 mismatch")
             target = self.root / plugin_id / version / resolved
