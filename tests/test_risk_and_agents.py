@@ -3,6 +3,7 @@ import pytest
 
 from paper_live import EnvironmentController, ExecutionEnvironmentMode, OrderRequest, OrderSide, PaperAccount
 from paper_live.agents import AgentState, DebateOrchestratorAgent
+from paper_live.live_approval import LiveApprovalGate
 from paper_live.risk import RiskGuardian, RiskLimits
 from paper_live.skills import Skill, SkillRegistry
 
@@ -42,7 +43,9 @@ def test_live_mode_has_broker_allowlist_but_not_paper_gateway():
     secret = "s"
     import hashlib, hmac
     token = hmac.new(secret.encode(), b"environment-transition", hashlib.sha256).hexdigest()
-    c = EnvironmentController(transition_secret=secret)
+    gate = LiveApprovalGate()
+    gate.approve("test-operator", "test allowlist")
+    c = EnvironmentController(transition_secret=secret, live_approval_gate=gate)
     c.set_mode(ExecutionEnvironmentMode.REAL_LIVE, token)
     assert c.is_skill_allowed("skill-toss-broker")
     assert not c.is_skill_allowed("skill-virtual-matching-engine")
