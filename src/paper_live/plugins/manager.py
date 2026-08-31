@@ -2,7 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 import yaml
 from .installer import PluginInstaller, InstalledPlugin
-from .lifecycle import PluginLifecycle, PluginRecord
+from .lifecycle import PluginLifecycle, PluginRecord, PluginLifecycleError
 from .loader import RepositorySource
 from .manifest import load_manifest
 from .security import PluginSecurityValidator
@@ -20,6 +20,10 @@ class PluginManager:
     def register_verified(self, manifest):
         manifest.validate()
         self.validator.validate_manifest(manifest)
+        try:
+            self.lifecycle.get(manifest.id)
+        except PluginLifecycleError:
+            self.lifecycle.add(PluginRecord(manifest.id, manifest.version, manifest.source_commit or "untracked", manifest.sha256 or "untracked"))
         for skill_id in manifest.skills:
             self.registry.register(RegisteredSkill(skill_id, manifest.id, manifest.version, manifest.entrypoint))
 
