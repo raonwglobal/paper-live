@@ -24,6 +24,9 @@ class PluginManifest:
     source_commit: str | None = None
     sha256: str | None = None
 
+    def __post_init__(self) -> None:
+        self.validate()
+
     def validate(self) -> None:
         if not _PLUGIN_ID.fullmatch(self.id): raise ValueError("invalid plugin id")
         if not self.version.strip() or not self.name.strip(): raise ValueError("version and name are required")
@@ -38,7 +41,7 @@ def load_manifest(data: dict) -> PluginManifest:
     runtime = data.get("runtime") or {}
     raw = data.get("permissions") or {}
     execution = data.get("execution") or {}
-    manifest = PluginManifest(
+    return PluginManifest(
         id=str(plugin.get("id", "")), version=str(plugin.get("version", "")), name=str(plugin.get("name", "")),
         entrypoint=str(runtime.get("entrypoint", "")), skills=tuple(str(x) for x in data.get("skills", [])),
         permissions=PermissionPolicy(
@@ -46,5 +49,3 @@ def load_manifest(data: dict) -> PluginManifest:
             tuple(raw.get("filesystem", {}).get("read", [])), bool(raw.get("shell", False)),
             tuple(execution.get("allowed_modes", ["PAPER_SANDBOX", "VIRTUAL_BACKTEST"]))),
         source_commit=(data.get("source") or {}).get("commit"), sha256=(data.get("integrity") or {}).get("sha256"))
-    manifest.validate()
-    return manifest
