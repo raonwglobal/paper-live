@@ -18,7 +18,7 @@ class TossCredentials:
 class TossBrokerAdapter(BrokerAdapter):
     name = "toss"
 
-    def __init__(self, credentials: TossCredentials, timeout: float = 10.0):
+    def __init__(self, credentials: TossCredentials | None = None, timeout: float = 10.0):
         self.credentials = credentials
         self.timeout = timeout
         self._token: str | None = None
@@ -27,11 +27,17 @@ class TossBrokerAdapter(BrokerAdapter):
     def from_env(cls) -> "TossBrokerAdapter":
         return cls(TossCredentials(os.environ["TOSS_CLIENT_ID"], os.environ["TOSS_CLIENT_SECRET"], os.environ["TOSS_ACCOUNT_SEQ"]))
 
+    def _require_credentials(self) -> TossCredentials:
+        if self.credentials is None:
+            raise PermissionError("Toss credentials are not configured")
+        return self.credentials
+
     def _token_value(self) -> str:
+        credentials = self._require_credentials()
         if self._token:
             return self._token
         body = urllib.parse.urlencode({"grant_type": "client_credentials"}).encode()
-        auth = base64.b64encode(f"{self.credentials.client_id}:{self.credentials.client_secret}".encode()).decode()
+        auth = base64.b64encode(f"{credentials.client_id}:{credentials.client_secret}".encode()).decode()
         req = urllib.request.Request(f"{BASE_URL}/oauth2/token", data=body, headers={"Authorization": f"Basic {auth}", "Content-Type": "application/x-www-form-urlencoded"})
         with urllib.request.urlopen(req, timeout=self.timeout) as response:
             payload = json.load(response)
@@ -39,7 +45,8 @@ class TossBrokerAdapter(BrokerAdapter):
         return self._token
 
     def _request(self, method: str, path: str, body: dict | None = None) -> dict:
-        headers = {"Authorization": f"Bearer {self._token_value()}", "Content-Type": "application/json", "X-Tossinvest-Account": self.credentials.account_seq}
+        credentials = self._require_credentials()
+        headers = {"Authorization": f"Bearer {self._token_value()}", "Content-Type": "application/json", "X-Tossinvest-Account": credentials.account_seq}
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(f"{BASE_URL}{path}", data=data, headers=headers, method=method)
         try:
