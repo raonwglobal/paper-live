@@ -32,6 +32,9 @@ class TossBrokerAdapter(BrokerAdapter):
             raise PermissionError("Toss credentials are not configured")
         return self.credentials
 
+    def _live_enabled(self) -> bool:
+        return os.getenv("PAPER_LIVE_ENABLE_LIVE", "").strip().lower() in {"1", "true", "yes"}
+
     def _token_value(self) -> str:
         credentials = self._require_credentials()
         if self._token:
@@ -55,17 +58,31 @@ class TossBrokerAdapter(BrokerAdapter):
         except Exception as exc:
             raise TossApiError(str(exc)) from exc
 
-    def submit(self, request: OrderRequest) -> OrderResult:
+    def submit(self, request_or_symbol: OrderRequest | str, side: str | None = None, quantity: Decimal | None = None, price: Decimal | None = None) -> OrderResult:
+        """Submit an order only when live execution is explicitly enabled.
+
+        Accepts the protocol OrderRequest and a legacy positional form for compatibility.
+        """
+        if not self._live_enabled():
+            raise PermissionError("Toss live execution is disabled by default")
+        if isinstance(request_or_symbol, OrderRequest):
+            request = request_or_symbol
+        else:
+            if side is None or quantity is None:
+                raise ValueError("side and quantity are required")
+            request = OrderRequest(str(request_or_symbol), side, quantity, "limit" if price is not None else "market")
         if request.side not in {"BUY", "SELL"} or request.order_type.upper() not in {"LIMIT", "MARKET"}:
             raise ValueError("unsupported Toss order request")
         payload = {"symbol": request.symbol, "side": request.side, "orderType": request.order_type.upper(), "quantity": str(request.quantity)}
-        if request.order_type.upper() == "LIMIT":
-            raise ValueError("Toss LIMIT requires price; use submit_typed_order")
+        if price is not None:
+            payload["price"] = str(price)
         response = self._request("POST", "/api/v1/orders", payload)
         result = response.get("result", {})
         return OrderResult(self.name, result.get("orderId", ""), True)
 
     def submit_typed_order(self, *, symbol: str, side: str, order_type: str, quantity: Decimal | None = None, price: Decimal | None = None, order_amount: Decimal | None = None, client_order_id: str | None = None, time_in_force: str | None = None) -> OrderResult:
+        if not self._live_enabled():
+            raise PermissionError("Toss live execution is disabled by default")
         if (quantity is None) == (order_amount is None):
             raise ValueError("exactly one of quantity or order_amount is required")
         payload = {"symbol": symbol, "side": side, "orderType": order_type}
@@ -78,5 +95,7 @@ class TossBrokerAdapter(BrokerAdapter):
         return OrderResult(self.name, result.get("orderId", ""), True)
 
     def cancel(self, order_id: str) -> bool:
+        if not self._live_enabled():
+            raise PermissionError("Toss live execution is disabled by default")
         self._request("POST", f"/api/v1/orders/{urllib.parse.quote(order_id, safe='')}/cancel")
         return True
