@@ -18,8 +18,10 @@ def test_verified_plugin_can_enable():
     assert r.enable("demo-plugin").enabled
 
 def test_live_cannot_be_granted_by_manifest():
-    with pytest.raises(ValueError):
-        manifest(permissions=PermissionPolicy(allowed_modes=("REAL_LIVE",)))
+    # Validation is explicit (load/registry time), not dataclass construction.
+    m = manifest(permissions=PermissionPolicy(allowed_modes=("REAL_LIVE",)))
+    with pytest.raises(ValueError, match="REAL_LIVE"):
+        m.validate()
 
 def test_non_github_url_rejected():
     r = PluginRegistry()
