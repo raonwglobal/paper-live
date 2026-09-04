@@ -1,3 +1,10 @@
+"""Environment promotion live-approval gate.
+
+This gate controls whether `EnvironmentController` may enter `REAL_LIVE`.
+It is intentionally simpler than the order-level gate in
+`paper_live.security.live_approval_gate`, which issues short-lived
+approval IDs for individual broker submits.
+"""
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -10,6 +17,8 @@ class LiveApproval:
     reason: str
 
 class LiveApprovalGate:
+    """Explicit human approval required before REAL_LIVE environment promotion."""
+
     def __init__(self):
         self._approval: LiveApproval | None = None
 
