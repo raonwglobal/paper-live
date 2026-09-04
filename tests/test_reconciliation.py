@@ -15,7 +15,5 @@ def test_reconciliation_detects_status_and_fill_drift():
 
 
 def test_reconciliation_detects_unknown_order():
-    issues = OrderReconciler(OrderLifecycle()).compare(
-        [{"client_order_id": "missing", "status": "NEW"}]
-    )
+    issues = OrderReconciler(OrderLifecycle()).compare([{"client_order_id": "missing", "status": "NEW"}])
     assert issues[0].kind == "MISSING_LOCAL"

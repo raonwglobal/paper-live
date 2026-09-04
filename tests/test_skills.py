@@ -19,5 +19,6 @@ def test_chart_vlm_injection():
     class Provider:
         def analyze(self, image_bytes, prompt):
             return ChartAnalysis("UP", 100.0, 120.0, 0.8, "trend")
+
     result = ChartVLMSkill(Provider()).analyze(b"image")
     assert result.trend == "UP"
