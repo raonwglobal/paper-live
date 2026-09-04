@@ -1,3 +1,9 @@
+"""Order-level live-trading approval with nonce and TTL.
+
+Used by `BrokerRouter` to authorize individual REAL_LIVE submits.
+Environment mode promotion uses the separate gate in
+`paper_live.live_approval`.
+"""
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -14,6 +20,7 @@ class LiveApproval:
 
 class LiveApprovalGate:
     """Short-lived live-trading approval with a per-instance nonce."""
+
     def __init__(self):
         self._approval: LiveApproval | None = None
         self.nonce = secrets.token_urlsafe(24)
