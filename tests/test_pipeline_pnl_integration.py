@@ -1,5 +1,5 @@
 from decimal import Decimal
-from paper_live.execution import ExecutionGateway, OrderRequest, OrderSide, PaperAccount, VirtualMatchingEngine
+from paper_live.execution import ExecutionGateway, PaperOrderRequest, OrderSide, PaperAccount, VirtualMatchingEngine
 from paper_live.environment import EnvironmentController
 from paper_live.pnl import PortfolioLedger, Side
 
@@ -10,7 +10,7 @@ def test_paper_fill_can_be_applied_to_portfolio_pnl():
     engine = VirtualMatchingEngine(account, slippage_bps=Decimal("0"))
     gateway = ExecutionGateway(controller, engine)
     fill = gateway.execute(
-        OrderRequest("ABC", OrderSide.BUY, Decimal("10"), client_order_id="int-1"),
+        PaperOrderRequest("ABC", OrderSide.BUY, Decimal("10"), client_order_id="int-1"),
         Decimal("100"),
     )
     ledger = PortfolioLedger()

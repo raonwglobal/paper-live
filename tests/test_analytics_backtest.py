@@ -4,7 +4,7 @@ from pathlib import Path
 from paper_live.analytics import OHLCV, max_drawdown, rsi, screen, ScreenRule, sharpe_ratio
 from paper_live.backtest import BacktestRunner
 from paper_live.environment import EnvironmentController
-from paper_live.execution import ExecutionGateway, OrderRequest, OrderSide, PaperAccount, VirtualMatchingEngine
+from paper_live.execution import ExecutionGateway, PaperOrderRequest, OrderSide, PaperAccount, VirtualMatchingEngine
 from paper_live.reflection import EpisodicMemory, SelfReflectionWorker, TradeEpisode
 
 
@@ -29,9 +29,9 @@ def test_backtest_runner():
     gateway = ExecutionGateway(EnvironmentController(), VirtualMatchingEngine(account))
     def strategy(i, history):
         if i == 0:
-            return OrderRequest("ABC", OrderSide.BUY, Decimal("1"))
+            return PaperOrderRequest("ABC", OrderSide.BUY, Decimal("1"))
         if i == len(history) - 1 and i == 5:
-            return OrderRequest("ABC", OrderSide.SELL, Decimal("1"))
+            return PaperOrderRequest("ABC", OrderSide.SELL, Decimal("1"))
         return None
     result = BacktestRunner(gateway, account).run(candles()[:6], strategy)
     assert result.fills == 2
