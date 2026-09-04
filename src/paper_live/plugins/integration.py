@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from ..environment import EnvironmentController, ExecutionEnvironmentMode
-from ..execution import ExecutionGateway, Fill, OrderRequest
+from ..execution import ExecutionGateway, Fill, PaperOrderRequest
 from ..risk import RiskGuardian
 from .executor import PluginSkillExecutor, SkillExecutionError
 from .lifecycle import PluginLifecycle, PluginLifecycleError, PluginState
@@ -38,24 +38,22 @@ class PluginRuntime:
         self.policy = policy or PluginExecutionPolicy()
 
     def invoke(self, request: PluginExecutionRequest, **kwargs: Any) -> Any:
-        record = self.lifecycle.get(request.plugin_id)
-        if record.state is not PluginState.ENABLED:
-            raise PluginLifecycleError(f"plugin is not enabled: {request.plugin_id}")
-        skill = self.registry.resolve(request.skill_id)
-        if skill.plugin_id != request.plugin_id:
-            raise SkillExecutionError("skill does not belong to requested plugin")
-        actual_mode = self.environment.get_current_mode()
-        if request.mode.value != actual_mode.value:
-            raise PermissionError("plugin requested mode does not match environment")
-        self.policy.check(request.mode.value)
-        return self.executor.execute(request.skill_id, mode=request.mode.value, **kwargs)
-
-    def submit_paper_order(self, request: PluginExecutionRequest, order: OrderRequest,
-                           reference_price: Decimal, available_quantity: Decimal | None = None) -> Fill:
         if request.mode is ExecutionEnvironmentMode.REAL_LIVE:
-            raise PermissionError("plugin trading cannot execute REAL_LIVE")
-        if self.environment.get_current_mode() is not request.mode:
-            raise PermissionError("environment mode changed before order execution")
-        self.policy.check(request.mode.value)
+            raise PermissionError("plugin runtime refuses REAL_LIVE execution")
+        self.environment.assert_skill_allowed("skill-plugin-lifecycle")
+        record = self.lifecycle.get(request.plugin_id)
+        if record is None or record.state is not PluginState.ACTIVE:
+            raise PluginLifecycleError(f"plugin is not ACTIVE: {request.plugin_id}")
+        self.policy.validate_runtime_call(record.manifest, request.skill_id)
+        try:
+            return self.executor.execute(request.plugin_id, request.skill_id, **kwargs)
+        except SkillExecutionError:
+            raise
+
+    def submit_paper_order(self, request: PluginExecutionRequest, order: PaperOrderRequest,
+                           reference_price: Decimal) -> Fill:
+        if request.mode is ExecutionEnvironmentMode.REAL_LIVE:
+            raise PermissionError("plugin runtime refuses REAL_LIVE execution")
+        # Plugins may only propose; core risk + gateway own the fill path.
         self.risk.approve(order, reference_price)
-        return self.execution.execute(order, reference_price, available_quantity)
+        return self.execution.execute(order, reference_price)

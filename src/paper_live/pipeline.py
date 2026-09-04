@@ -6,7 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from .orchestrator_v2 import TradingGraph
-from .execution import ExecutionGateway, OrderRequest, OrderSide
+from .execution import ExecutionGateway, PaperOrderRequest, OrderSide
 from .pnl import PortfolioLedger, Side
 from .risk import RiskGuardian
 from .reflection import EpisodicMemory, SelfReflectionWorker, TradeEpisode
@@ -49,7 +49,7 @@ class TradingPipeline:
             self._reflect(symbol, action, price, price, Decimal("0"), market, "HOLD")
             return PipelineResult(symbol, action, CycleState.REFLECTED, False, Decimal("0"))
         side = OrderSide.BUY if action == "BUY" else OrderSide.SELL
-        order = OrderRequest(symbol, side, quantity, client_order_id=f"pipeline-{symbol}-{uuid4().hex[:8]}")
+        order = PaperOrderRequest(symbol, side, quantity, client_order_id=f"pipeline-{symbol}-{uuid4().hex[:8]}")
         try:
             self.risk.approve(order, price)
             fill = self.gateway.execute(order, price)
