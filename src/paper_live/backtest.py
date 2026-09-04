@@ -6,7 +6,7 @@ from typing import Callable, Sequence
 from uuid import uuid4
 
 from .analytics import OHLCV, max_drawdown, sharpe_ratio
-from .execution import ExecutionGateway, OrderRequest, PaperAccount
+from .execution import ExecutionGateway, PaperOrderRequest, PaperAccount
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,7 @@ class BacktestRunner:
         self.gateway = gateway
         self.account = account
 
-    def run(self, candles: Sequence[OHLCV], strategy: Callable[[int, Sequence[OHLCV]], OrderRequest | None]) -> BacktestResult:
+    def run(self, candles: Sequence[OHLCV], strategy: Callable[[int, Sequence[OHLCV]], PaperOrderRequest | None]) -> BacktestResult:
         initial = self.account.cash
         equity: list[Decimal] = []
         fills = 0
@@ -32,7 +32,7 @@ class BacktestRunner:
             order = strategy(i, candles[:i + 1])
             if order is not None:
                 if not order.client_order_id:
-                    order = OrderRequest(order.symbol, order.side, order.quantity, order.order_type, order.limit_price, f"backtest-{i}-{uuid4().hex[:12]}")
+                    order = PaperOrderRequest(order.symbol, order.side, order.quantity, order.order_type, order.limit_price, f"backtest-{i}-{uuid4().hex[:12]}")
                 self.gateway.execute(order, candle.close)
                 fills += 1
             position_value = sum((qty * candle.close for symbol, qty in self.account.positions.items()), Decimal("0"))

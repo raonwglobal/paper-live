@@ -5,7 +5,7 @@ from decimal import Decimal
 from threading import Lock
 
 from .environment import EnvironmentController, ExecutionEnvironmentMode
-from .execution import OrderRequest, OrderSide, PaperAccount
+from .execution import PaperOrderRequest, OrderSide, PaperAccount
 
 
 @dataclass(frozen=True)
@@ -44,7 +44,7 @@ class RiskGuardian:
         self.circuit_breaker = CircuitBreaker()
         self.daily_pnl = Decimal("0")
 
-    def approve(self, order: OrderRequest, reference_price: Decimal) -> None:
+    def approve(self, order: PaperOrderRequest, reference_price: Decimal) -> None:
         if self.circuit_breaker.tripped:
             raise PermissionError("circuit breaker is active")
         if order.quantity <= 0 or reference_price <= 0:

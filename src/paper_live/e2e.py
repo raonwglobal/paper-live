@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from .agents import AgentState, DebateOrchestratorAgent, MacroRegimeAgent, FundamentalAnalystAgent, TechnicalVisionAgent, SentimentQuantAgent
-from .execution import ExecutionGateway, OrderRequest, OrderSide
+from .execution import ExecutionGateway, PaperOrderRequest, OrderSide
 from .risk import RiskGuardian
 
 
@@ -36,7 +36,7 @@ class PaperTradingCycle:
             state.events.append({"type": "ORDER_SKIPPED", "reason": "HOLD"})
             return PaperCycleResult(symbol, action, True, len(state.events))
         side = OrderSide.BUY if action == "BUY" else OrderSide.SELL
-        order = OrderRequest(symbol, side, quantity, client_order_id=f"paper-{symbol}")
+        order = PaperOrderRequest(symbol, side, quantity, client_order_id=f"paper-{symbol}")
         try:
             self.risk.approve(order, price)
             fill = self.gateway.execute(order, price)
