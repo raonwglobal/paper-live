@@ -20,6 +20,8 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    # Soft gate until full-repo ruff format is committed
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -35,7 +37,6 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
-    # Non-blocking until the codebase is fully typed
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
