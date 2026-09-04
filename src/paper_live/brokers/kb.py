@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json, os, urllib.request
 from dataclasses import dataclass
-from .protocol import BrokerAdapter, OrderRequest, OrderResult
+from .protocol import BrokerAdapter, BrokerOrderRequest, OrderResult
 
 BASE_URL = "https://developer.kbsec.com:32484"
 
@@ -46,7 +46,7 @@ class KbBrokerAdapter(BrokerAdapter):
         except Exception as exc:
             raise KbApiError(str(exc)) from exc
 
-    def submit(self, request: OrderRequest) -> OrderResult:
+    def submit(self, request: BrokerOrderRequest) -> OrderResult:
         # The public KB guide identifies ssqm1802 as an order endpoint, but
         # explicitly states that the detailed request fields are finalized by
         # the official API specification. Do not guess field mappings in a
