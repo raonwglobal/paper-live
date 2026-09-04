@@ -2,8 +2,6 @@ name: ruff-format
 
 on:
   workflow_dispatch:
-  push:
-    branches: [feature/agent-skill-quant-runtime]
 
 permissions:
   contents: write
