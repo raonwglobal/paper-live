@@ -2,7 +2,7 @@ from __future__ import annotations
 import base64, json, os, urllib.parse, urllib.request
 from dataclasses import dataclass
 from decimal import Decimal
-from .protocol import BrokerAdapter, OrderRequest, OrderResult
+from .protocol import BrokerAdapter, BrokerOrderRequest, OrderResult
 
 BASE_URL = "https://openapi.tossinvest.com"
 
@@ -58,19 +58,19 @@ class TossBrokerAdapter(BrokerAdapter):
         except Exception as exc:
             raise TossApiError(str(exc)) from exc
 
-    def submit(self, request_or_symbol: OrderRequest | str, side: str | None = None, quantity: Decimal | None = None, price: Decimal | None = None) -> OrderResult:
+    def submit(self, request_or_symbol: BrokerOrderRequest | str, side: str | None = None, quantity: Decimal | None = None, price: Decimal | None = None) -> OrderResult:
         """Submit an order only when live execution is explicitly enabled.
 
-        Accepts the protocol OrderRequest and a legacy positional form for compatibility.
+        Accepts BrokerOrderRequest and a legacy positional form for compatibility.
         """
         if not self._live_enabled():
             raise PermissionError("Toss live execution is disabled by default")
-        if isinstance(request_or_symbol, OrderRequest):
+        if isinstance(request_or_symbol, BrokerOrderRequest):
             request = request_or_symbol
         else:
             if side is None or quantity is None:
                 raise ValueError("side and quantity are required")
-            request = OrderRequest(str(request_or_symbol), side, quantity, "limit" if price is not None else "market")
+            request = BrokerOrderRequest(str(request_or_symbol), side, quantity, "limit" if price is not None else "market")
         if request.side not in {"BUY", "SELL"} or request.order_type.upper() not in {"LIMIT", "MARKET"}:
             raise ValueError("unsupported Toss order request")
         payload = {"symbol": request.symbol, "side": request.side, "orderType": request.order_type.upper(), "quantity": str(request.quantity)}
