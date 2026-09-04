@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paper-live"
+version = "0.1.0"
+description = "Agent and skill based paper trading runtime"
+requires-python = ">=3.11"
+dependencies = ["langgraph>=0.6,<1", "PyYAML>=6.0,<7"]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6", "mypy>=1.11"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501", "B017", "F841", "UP042"]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+packages = ["paper_live"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+check_untyped_defs = true
+
+[tool.coverage.run]
+source = ["paper_live"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 0
