@@ -1,13 +1,17 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any
-from .data_skills import DataSkillError, fetch_json
+
+from .data_skills import fetch_json
+
 
 @dataclass(frozen=True)
 class ProviderConfig:
     base_url: str
     api_key: str = ""
     timeout: int = 10
+
 
 class JsonProviderAdapter:
     def __init__(self, config: ProviderConfig):
@@ -22,11 +26,14 @@ class JsonProviderAdapter:
             headers["Authorization"] = f"Bearer {self.config.api_key}"
         return fetch_json(url, headers=headers, timeout=self.config.timeout)
 
+
 class DartAdapter(JsonProviderAdapter):
     pass
 
+
 class SecEdgarAdapter(JsonProviderAdapter):
     pass
+
 
 class OpenBBAdapter(JsonProviderAdapter):
     pass

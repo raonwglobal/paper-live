@@ -12,8 +12,14 @@ def test_e2e_buy_cycle():
     cycle = PaperTradingCycle(gateway, RiskGuardian(controller, account))
     result = cycle.run(
         "ABC",
-        {"macro_regime": "BULLISH", "fundamental_signal": "BUY", "technical_signal": "BUY", "sentiment_signal": "POSITIVE"},
-        Decimal("10"), Decimal("100"),
+        {
+            "macro_regime": "BULLISH",
+            "fundamental_signal": "BUY",
+            "technical_signal": "BUY",
+            "sentiment_signal": "POSITIVE",
+        },
+        Decimal("10"),
+        Decimal("100"),
     )
     assert result.action == "BUY"
     assert result.approved

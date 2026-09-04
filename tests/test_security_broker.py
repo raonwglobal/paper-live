@@ -1,5 +1,5 @@
-import os
 from decimal import Decimal
+
 import pytest
 
 from paper_live.brokers import TossBrokerAdapter

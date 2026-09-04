@@ -1,8 +1,10 @@
 from __future__ import annotations
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+
 import json
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from threading import RLock
+
 
 @dataclass(frozen=True)
 class PluginAuditEvent:
@@ -17,8 +19,9 @@ class PluginAuditEvent:
     def to_json(self) -> str:
         value = asdict(self)
         if not value["timestamp"]:
-            value["timestamp"] = datetime.now(timezone.utc).isoformat()
+            value["timestamp"] = datetime.now(UTC).isoformat()
         return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
 
 class PluginAuditLog:
     def __init__(self):

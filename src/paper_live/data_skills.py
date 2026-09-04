@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any
 from urllib.request import Request, urlopen
-from typing import Any, Sequence
 
 
 class DataSkillError(RuntimeError):
@@ -45,7 +46,7 @@ class NewsSentimentSkill:
     NEGATIVE = {"miss", "loss", "downgrade", "crash", "fraud", "weak", "bearish", "decline"}
 
     def score(self, item: NewsItem) -> float:
-        words = {w.strip(".,:;!?()[]{}\"").lower() for w in (item.title + " " + item.text).split()}
+        words = {w.strip('.,:;!?()[]{}"').lower() for w in (item.title + " " + item.text).split()}
         pos = len(words & self.POSITIVE)
         neg = len(words & self.NEGATIVE)
         total = pos + neg
@@ -56,4 +57,7 @@ class NewsSentimentSkill:
         return "POSITIVE" if value > 0.2 else "NEGATIVE" if value < -0.2 else "NEUTRAL"
 
     def extract(self, items: Sequence[NewsItem]) -> list[dict[str, Any]]:
-        return [{"title": item.title, "score": self.score(item), "label": self.classify(item), "url": item.url} for item in items]
+        return [
+            {"title": item.title, "score": self.score(item), "label": self.classify(item), "url": item.url}
+            for item in items
+        ]

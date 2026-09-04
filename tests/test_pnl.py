@@ -1,6 +1,9 @@
 from decimal import Decimal
+
 import pytest
+
 from paper_live.pnl import PortfolioLedger, Side
+
 
 def test_average_cost_and_realized_pnl():
     p = PortfolioLedger()
@@ -11,6 +14,7 @@ def test_average_cost_and_realized_pnl():
     assert p.position("ABC").realized_pnl == Decimal("100")
     assert p.unrealized_pnl("ABC", Decimal("140")) == Decimal("450")
     assert p.total_pnl("ABC", Decimal("140")) == Decimal("550")
+
 
 def test_cannot_sell_more_than_position():
     with pytest.raises(ValueError):

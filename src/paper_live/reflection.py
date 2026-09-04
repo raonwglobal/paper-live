@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 import json
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +32,11 @@ class EpisodicMemory:
     def read_all(self) -> list[TradeEpisode]:
         if not self.path.exists():
             return []
-        return [TradeEpisode(**json.loads(line)) for line in self.path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        return [
+            TradeEpisode(**json.loads(line))
+            for line in self.path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
 
 
 class SelfReflectionWorker:
@@ -42,6 +46,17 @@ class SelfReflectionWorker:
     def reflect(self, episode: TradeEpisode) -> dict[str, Any]:
         pnl = float(episode.pnl)
         verdict = "POSITIVE" if pnl > 0 else "NEGATIVE" if pnl < 0 else "NEUTRAL"
-        lesson = "preserve decision context" if pnl > 0 else "review signal and risk gate" if pnl < 0 else "insufficient outcome signal"
+        lesson = (
+            "preserve decision context"
+            if pnl > 0
+            else "review signal and risk gate"
+            if pnl < 0
+            else "insufficient outcome signal"
+        )
         self.memory.append(episode)
-        return {"episode_id": episode.episode_id, "verdict": verdict, "lesson": lesson, "reflected_at": datetime.now(timezone.utc).isoformat()}
+        return {
+            "episode_id": episode.episode_id,
+            "verdict": verdict,
+            "lesson": lesson,
+            "reflected_at": datetime.now(UTC).isoformat(),
+        }

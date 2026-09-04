@@ -1,7 +1,10 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from decimal import Decimal
-from .order_lifecycle import OrderLifecycle, OrderStatus
+
+from .order_lifecycle import OrderLifecycle
+
 
 @dataclass(frozen=True)
 class ReconciliationIssue:
@@ -10,8 +13,10 @@ class ReconciliationIssue:
     expected: str
     observed: str
 
+
 class OrderReconciler:
     """Compare local order state with broker/paper observations without mutating execution state."""
+
     def __init__(self, lifecycle: OrderLifecycle):
         self.lifecycle = lifecycle
 

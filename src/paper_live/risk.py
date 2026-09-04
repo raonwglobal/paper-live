@@ -5,7 +5,7 @@ from decimal import Decimal
 from threading import Lock
 
 from .environment import EnvironmentController, ExecutionEnvironmentMode
-from .execution import PaperOrderRequest, OrderSide, PaperAccount
+from .execution import OrderSide, PaperAccount, PaperOrderRequest
 
 
 @dataclass(frozen=True)
@@ -56,7 +56,9 @@ class RiskGuardian:
             raise PermissionError("daily loss limit exceeded")
 
         current_position = self.account.positions.get(order.symbol, Decimal("0"))
-        projected = current_position + order.quantity if order.side == OrderSide.BUY else current_position - order.quantity
+        projected = (
+            current_position + order.quantity if order.side == OrderSide.BUY else current_position - order.quantity
+        )
         if projected < 0:
             raise PermissionError("sell quantity exceeds current position")
         if projected * reference_price > self.limits.max_position_notional:

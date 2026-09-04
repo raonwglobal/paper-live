@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+
 class PluginModeDenied(PermissionError):
     pass
+
 
 class PluginExecutionPolicy:
     """Central deny-by-default gate for plugin skills.
@@ -10,6 +12,7 @@ class PluginExecutionPolicy:
     owned by the core broker/risk/approval path and cannot be enabled by a
     plugin policy instance.
     """
+
     SAFE_MODES = frozenset({"PAPER_SANDBOX", "VIRTUAL_BACKTEST"})
 
     def __init__(self, allowed_modes: set[str] | None = None):

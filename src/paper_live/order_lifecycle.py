@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, replace
-from enum import Enum
 from decimal import Decimal
+from enum import Enum
+
 
 class OrderStatus(str, Enum):
     NEW = "NEW"
@@ -9,6 +11,7 @@ class OrderStatus(str, Enum):
     FILLED = "FILLED"
     CANCELED = "CANCELED"
     REJECTED = "REJECTED"
+
 
 @dataclass(frozen=True)
 class OrderRecord:
@@ -18,6 +21,7 @@ class OrderRecord:
     quantity: Decimal
     filled_quantity: Decimal = Decimal("0")
     status: OrderStatus = OrderStatus.NEW
+
 
 class OrderLifecycle:
     def __init__(self) -> None:

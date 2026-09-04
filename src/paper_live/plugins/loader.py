@@ -1,15 +1,20 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from urllib.request import Request, urlopen
+
 from .security import PluginSecurityValidator
+
 
 @dataclass(frozen=True)
 class RepositorySource:
     url: str
     ref: str = "main"
 
+
 class PluginSourceLoader:
     """Fetches only manifest metadata; it never executes repository code."""
+
     def __init__(self, validator: PluginSecurityValidator | None = None, timeout: float = 10.0):
         self.validator = validator or PluginSecurityValidator()
         self.timeout = timeout

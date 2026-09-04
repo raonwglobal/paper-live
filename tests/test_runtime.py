@@ -1,6 +1,6 @@
-from decimal import Decimal
 import hashlib
 import hmac
+from decimal import Decimal
 
 import pytest
 
@@ -9,9 +9,9 @@ from paper_live import (
     EnvironmentTransitionError,
     ExecutionEnvironmentMode,
     ExecutionGateway,
-    PaperOrderRequest,
     OrderSide,
     PaperAccount,
+    PaperOrderRequest,
     VirtualMatchingEngine,
 )
 from paper_live.live_approval import LiveApprovalGate
@@ -69,4 +69,6 @@ def test_gateway_refuses_live_execution():
     c.set_mode(ExecutionEnvironmentMode.REAL_LIVE, TOKEN)
     gateway = ExecutionGateway(c, VirtualMatchingEngine(PaperAccount(Decimal("100000"))))
     with pytest.raises(EnvironmentTransitionError):
-        gateway.execute(PaperOrderRequest("005930", OrderSide.BUY, Decimal("1"), client_order_id="live-test"), Decimal("7000"))
+        gateway.execute(
+            PaperOrderRequest("005930", OrderSide.BUY, Decimal("1"), client_order_id="live-test"), Decimal("7000")
+        )

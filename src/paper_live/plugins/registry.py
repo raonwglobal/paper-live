@@ -1,6 +1,9 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
+
 from .manifest import PluginManifest
+
 
 @dataclass(frozen=True)
 class RegisteredPlugin:
@@ -8,6 +11,7 @@ class RegisteredPlugin:
     repository_url: str
     trusted: bool = False
     enabled: bool = False
+
 
 class PluginRegistry:
     def __init__(self):
@@ -47,5 +51,6 @@ class PluginRegistry:
 
     def _get(self, plugin_id: str) -> RegisteredPlugin:
         plugin = self.get(plugin_id)
-        if plugin is None: raise KeyError(plugin_id)
+        if plugin is None:
+            raise KeyError(plugin_id)
         return plugin

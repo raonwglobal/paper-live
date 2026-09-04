@@ -1,15 +1,20 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
+
 from .lifecycle import PluginLifecycle, PluginRecord, PluginState
+
 
 class PluginRollbackError(RuntimeError):
     pass
+
 
 @dataclass(frozen=True)
 class PluginVersion:
     version: str
     commit: str
     artifact_sha256: str
+
 
 class PluginRollbackManager:
     def __init__(self, lifecycle: PluginLifecycle):
@@ -32,6 +37,8 @@ class PluginRollbackManager:
         target = self.previous(plugin_id)
         current = self.lifecycle.get(plugin_id)
         self.lifecycle.disable(plugin_id)
-        replacement = PluginRecord(plugin_id, target.version, target.commit, target.artifact_sha256, PluginState.VERIFIED)
+        replacement = PluginRecord(
+            plugin_id, target.version, target.commit, target.artifact_sha256, PluginState.VERIFIED
+        )
         self.lifecycle._records[plugin_id] = replacement  # controlled internal transition
         return replacement

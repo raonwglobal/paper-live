@@ -1,11 +1,20 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from .agents import AgentState, MacroRegimeAgent, FundamentalAnalystAgent, TechnicalVisionAgent, SentimentQuantAgent, DebateOrchestratorAgent
+from .agents import (
+    AgentState,
+    DebateOrchestratorAgent,
+    FundamentalAnalystAgent,
+    MacroRegimeAgent,
+    SentimentQuantAgent,
+    TechnicalVisionAgent,
+)
 from .state_machine import CycleState, CycleStateMachine
+
 
 class GraphState(TypedDict):
     symbol: str
@@ -15,13 +24,16 @@ class GraphState(TypedDict):
     risk: dict[str, Any]
     events: list[dict[str, Any]]
 
+
 @dataclass
 class GraphCycleResult:
     state: AgentState
     lifecycle: CycleState
 
+
 class TradingGraph:
     """LangGraph StateGraph orchestration for deterministic agent boundaries."""
+
     def __init__(self):
         self.nodes = {
             "macro": MacroRegimeAgent(),
@@ -46,6 +58,7 @@ class TradingGraph:
 
     def _node(self, name: str):
         agent = self.nodes[name]
+
         def invoke(data: GraphState) -> GraphState:
             state = AgentState(
                 symbol=data["symbol"],
@@ -64,10 +77,18 @@ class TradingGraph:
                 "risk": updated.risk,
                 "events": updated.events,
             }
+
         return invoke
 
     def analyze(self, symbol: str, market: dict[str, Any]) -> GraphCycleResult:
-        initial: GraphState = {"symbol": symbol, "market": market, "signals": {}, "decision": {}, "risk": {}, "events": []}
+        initial: GraphState = {
+            "symbol": symbol,
+            "market": market,
+            "signals": {},
+            "decision": {},
+            "risk": {},
+            "events": [],
+        }
         result = self.graph.invoke(initial)
         state = AgentState(**result)
         lifecycle = CycleStateMachine()

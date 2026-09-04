@@ -1,6 +1,7 @@
 from decimal import Decimal
-from paper_live.execution import ExecutionGateway, PaperOrderRequest, OrderSide, PaperAccount, VirtualMatchingEngine
+
 from paper_live.environment import EnvironmentController
+from paper_live.execution import ExecutionGateway, OrderSide, PaperAccount, PaperOrderRequest, VirtualMatchingEngine
 from paper_live.pnl import PortfolioLedger, Side
 
 

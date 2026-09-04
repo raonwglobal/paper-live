@@ -12,11 +12,13 @@ from .lifecycle import PluginLifecycle, PluginLifecycleError, PluginState
 from .policy import PluginExecutionPolicy
 from .skill_registry import SkillRegistry
 
+
 @dataclass(frozen=True)
 class PluginExecutionRequest:
     plugin_id: str
     skill_id: str
     mode: ExecutionEnvironmentMode
+
 
 class PluginRuntime:
     """Application-level integration point for verified plugin skills.
@@ -25,10 +27,17 @@ class PluginRuntime:
     passes through the core RiskGuardian and ExecutionGateway. Plugins have no
     direct broker path and REAL_LIVE is rejected before a handler is invoked.
     """
-    def __init__(self, lifecycle: PluginLifecycle, registry: SkillRegistry,
-                 executor: PluginSkillExecutor, environment: EnvironmentController,
-                 risk: RiskGuardian, execution: ExecutionGateway,
-                 policy: PluginExecutionPolicy | None = None):
+
+    def __init__(
+        self,
+        lifecycle: PluginLifecycle,
+        registry: SkillRegistry,
+        executor: PluginSkillExecutor,
+        environment: EnvironmentController,
+        risk: RiskGuardian,
+        execution: ExecutionGateway,
+        policy: PluginExecutionPolicy | None = None,
+    ):
         self.lifecycle = lifecycle
         self.registry = registry
         self.executor = executor
@@ -50,8 +59,13 @@ class PluginRuntime:
         self.policy.check(request.mode.value)
         return self.executor.execute(request.skill_id, mode=request.mode.value, **kwargs)
 
-    def submit_paper_order(self, request: PluginExecutionRequest, order: PaperOrderRequest,
-                           reference_price: Decimal, available_quantity: Decimal | None = None) -> Fill:
+    def submit_paper_order(
+        self,
+        request: PluginExecutionRequest,
+        order: PaperOrderRequest,
+        reference_price: Decimal,
+        available_quantity: Decimal | None = None,
+    ) -> Fill:
         if request.mode is ExecutionEnvironmentMode.REAL_LIVE:
             raise PermissionError("plugin trading cannot execute REAL_LIVE")
         if self.environment.get_current_mode() is not request.mode:

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from math import sqrt
-from typing import Iterable, Sequence
 
 
 @dataclass(frozen=True)
@@ -21,7 +21,7 @@ def sma(values: Sequence[Decimal], period: int) -> list[Decimal | None]:
         raise ValueError("period must be positive")
     out: list[Decimal | None] = [None] * len(values)
     for i in range(period - 1, len(values)):
-        out[i] = sum(values[i - period + 1:i + 1], Decimal("0")) / Decimal(period)
+        out[i] = sum(values[i - period + 1 : i + 1], Decimal("0")) / Decimal(period)
     return out
 
 
@@ -49,11 +49,15 @@ def rsi(values: Sequence[Decimal], period: int = 14) -> list[Decimal | None]:
     losses = [max(values[i - 1] - values[i], Decimal("0")) for i in range(1, len(values))]
     avg_gain = sum(gains[:period], Decimal("0")) / Decimal(period)
     avg_loss = sum(losses[:period], Decimal("0")) / Decimal(period)
-    out[period] = Decimal("100") if avg_loss == 0 else Decimal("100") - Decimal("100") / (Decimal("1") + avg_gain / avg_loss)
+    out[period] = (
+        Decimal("100") if avg_loss == 0 else Decimal("100") - Decimal("100") / (Decimal("1") + avg_gain / avg_loss)
+    )
     for i in range(period + 1, len(values)):
         avg_gain = (avg_gain * Decimal(period - 1) + gains[i - 1]) / Decimal(period)
         avg_loss = (avg_loss * Decimal(period - 1) + losses[i - 1]) / Decimal(period)
-        out[i] = Decimal("100") if avg_loss == 0 else Decimal("100") - Decimal("100") / (Decimal("1") + avg_gain / avg_loss)
+        out[i] = (
+            Decimal("100") if avg_loss == 0 else Decimal("100") - Decimal("100") / (Decimal("1") + avg_gain / avg_loss)
+        )
     return out
 
 

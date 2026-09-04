@@ -1,16 +1,21 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from urllib.parse import urlparse
+
 from .manifest import PluginManifest
+
 
 class PluginSecurityError(ValueError):
     pass
+
 
 @dataclass(frozen=True)
 class SecurityPolicy:
     allowed_hosts: tuple[str, ...] = ("github.com", "raw.githubusercontent.com")
     allow_shell: bool = False
     allow_live: bool = False
+
 
 class PluginSecurityValidator:
     def __init__(self, policy: SecurityPolicy | None = None):

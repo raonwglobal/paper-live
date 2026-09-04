@@ -1,23 +1,26 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
 import hashlib
 import hmac
 import threading
-from typing import Dict, FrozenSet, Optional, TYPE_CHECKING
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from enum import Enum
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .live_approval import LiveApprovalGate
+
 
 class ExecutionEnvironmentMode(str, Enum):
     PAPER_SANDBOX = "PAPER_SANDBOX"
     VIRTUAL_BACKTEST = "VIRTUAL_BACKTEST"
     REAL_LIVE = "REAL_LIVE"
 
+
 class EnvironmentTransitionError(RuntimeError):
     pass
+
 
 @dataclass(frozen=True)
 class EnvironmentSnapshot:
@@ -26,23 +29,31 @@ class EnvironmentSnapshot:
     changed_at: datetime
     changed_by: str
 
+
 @dataclass
 class EnvironmentController:
     initial_mode: ExecutionEnvironmentMode = ExecutionEnvironmentMode.PAPER_SANDBOX
-    transition_secret: Optional[str] = None
-    live_approval_gate: Optional["LiveApprovalGate"] = None
+    transition_secret: str | None = None
+    live_approval_gate: LiveApprovalGate | None = None
     _mode: ExecutionEnvironmentMode = field(init=False)
     _version: int = field(default=0, init=False)
-    _changed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc), init=False)
+    _changed_at: datetime = field(default_factory=lambda: datetime.now(UTC), init=False)
     _changed_by: str = field(default="system", init=False)
     _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
-    _time_triggers: Dict[str, ExecutionEnvironmentMode] = field(default_factory=dict, init=False)
-    _kpi_triggers: Dict[str, tuple[float, ExecutionEnvironmentMode]] = field(default_factory=dict, init=False)
-    ALLOWED_SKILLS: Dict[ExecutionEnvironmentMode, FrozenSet[str]] = field(default_factory=lambda: {
-        ExecutionEnvironmentMode.PAPER_SANDBOX: frozenset({"skill-virtual-matching-engine", "skill-market-data"}),
-        ExecutionEnvironmentMode.VIRTUAL_BACKTEST: frozenset({"skill-virtual-matching-engine", "skill-historical-data"}),
-        ExecutionEnvironmentMode.REAL_LIVE: frozenset({"skill-toss-broker", "skill-kb-broker", "skill-market-data", "skill-risk-circuit-breaker"}),
-    }, init=False)
+    _time_triggers: dict[str, ExecutionEnvironmentMode] = field(default_factory=dict, init=False)
+    _kpi_triggers: dict[str, tuple[float, ExecutionEnvironmentMode]] = field(default_factory=dict, init=False)
+    ALLOWED_SKILLS: dict[ExecutionEnvironmentMode, frozenset[str]] = field(
+        default_factory=lambda: {
+            ExecutionEnvironmentMode.PAPER_SANDBOX: frozenset({"skill-virtual-matching-engine", "skill-market-data"}),
+            ExecutionEnvironmentMode.VIRTUAL_BACKTEST: frozenset(
+                {"skill-virtual-matching-engine", "skill-historical-data"}
+            ),
+            ExecutionEnvironmentMode.REAL_LIVE: frozenset(
+                {"skill-toss-broker", "skill-kb-broker", "skill-market-data", "skill-risk-circuit-breaker"}
+            ),
+        },
+        init=False,
+    )
 
     def __post_init__(self) -> None:
         self._mode = self.initial_mode
@@ -64,7 +75,9 @@ class EnvironmentController:
 
     def assert_skill_allowed(self, skill_name: str) -> None:
         if not self.is_skill_allowed(skill_name):
-            raise EnvironmentTransitionError(f"skill '{skill_name}' is forbidden in mode {self.get_current_mode().value}")
+            raise EnvironmentTransitionError(
+                f"skill '{skill_name}' is forbidden in mode {self.get_current_mode().value}"
+            )
 
     def set_mode(self, mode: ExecutionEnvironmentMode, auth_token: str, actor: str = "operator") -> bool:
         if not isinstance(mode, ExecutionEnvironmentMode):
@@ -78,7 +91,7 @@ class EnvironmentController:
         with self._lock:
             self._mode = mode
             self._version += 1
-            self._changed_at = datetime.now(timezone.utc)
+            self._changed_at = datetime.now(UTC)
             self._changed_by = actor
             return True
 
@@ -93,7 +106,7 @@ class EnvironmentController:
         self._kpi_triggers[metric] = (float(threshold), mode)
         return True
 
-    def evaluate_kpi(self, metric: str, value: float) -> Optional[ExecutionEnvironmentMode]:
+    def evaluate_kpi(self, metric: str, value: float) -> ExecutionEnvironmentMode | None:
         trigger = self._kpi_triggers.get(metric)
         if trigger and value >= trigger[0]:
             return trigger[1]

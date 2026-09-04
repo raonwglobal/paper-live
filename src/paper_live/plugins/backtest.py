@@ -1,16 +1,20 @@
 from __future__ import annotations
+
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Callable, Iterable
+
 from .executor import PluginSkillExecutor
 from .lifecycle import PluginLifecycle, PluginState
 from .policy import PluginExecutionPolicy
+
 
 @dataclass(frozen=True)
 class BacktestBar:
     timestamp: str
     symbol: str
     price: Decimal
+
 
 @dataclass(frozen=True)
 class BacktestResult:
@@ -19,16 +23,25 @@ class BacktestResult:
     orders: int
     final_cash: Decimal
 
+
 class PluginBacktestRunner:
     """Deterministic orchestration boundary; broker execution remains outside plugins."""
-    def __init__(self, lifecycle: PluginLifecycle, executor: PluginSkillExecutor,
-                 policy: PluginExecutionPolicy | None = None):
+
+    def __init__(
+        self, lifecycle: PluginLifecycle, executor: PluginSkillExecutor, policy: PluginExecutionPolicy | None = None
+    ):
         self.lifecycle = lifecycle
         self.executor = executor
         self.policy = policy or PluginExecutionPolicy()
 
-    def run(self, plugin_id: str, skill_id: str, bars: Iterable[BacktestBar],
-            initial_cash: Decimal, signal_to_order: Callable[[dict, BacktestBar], Decimal | None]) -> BacktestResult:
+    def run(
+        self,
+        plugin_id: str,
+        skill_id: str,
+        bars: Iterable[BacktestBar],
+        initial_cash: Decimal,
+        signal_to_order: Callable[[dict, BacktestBar], Decimal | None],
+    ) -> BacktestResult:
         record = self.lifecycle.get(plugin_id)
         if record.state != PluginState.ENABLED:
             raise PermissionError("plugin must be enabled")

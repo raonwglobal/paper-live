@@ -15,7 +15,9 @@ class PortfolioSnapshot:
 
 
 def snapshot(account: PaperAccount, prices: dict[str, Decimal]) -> PortfolioSnapshot:
-    market_value = sum((qty * prices.get(symbol, Decimal("0")) for symbol, qty in account.positions.items()), Decimal("0"))
+    market_value = sum(
+        (qty * prices.get(symbol, Decimal("0")) for symbol, qty in account.positions.items()), Decimal("0")
+    )
     return PortfolioSnapshot(account.cash, market_value, account.cash + market_value)
 
 

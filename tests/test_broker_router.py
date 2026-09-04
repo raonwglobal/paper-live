@@ -1,13 +1,20 @@
-import pytest
 from decimal import Decimal
-from paper_live.brokers.protocol import BrokerOrderRequest, OrderResult, LiveBrokerDenied
+
+import pytest
+
+from paper_live.brokers.protocol import BrokerOrderRequest, LiveBrokerDenied, OrderResult
 from paper_live.brokers.safe_router import BrokerRouter
 from paper_live.security.live_approval_gate import LiveApprovalGate
 
+
 class FakeBroker:
     name = "fake"
-    def submit(self, request): return OrderResult("fake", "1", True)
-    def cancel(self, order_id): return True
+
+    def submit(self, request):
+        return OrderResult("fake", "1", True)
+
+    def cancel(self, order_id):
+        return True
 
 
 def test_live_only():

@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 from pathlib import Path
+
 
 class PluginPackageError(ValueError):
     pass
+
 
 ALLOWED_ROOT_FILES = {"plugin.yaml", "README.md", "LICENSE", "pyproject.toml", "requirements.lock"}
 BLOCKED_FILES = {"Dockerfile", "Makefile", "install.sh", "setup.py", "package.json", ".env"}

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
 import hashlib
-import io
 import json
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Protocol, Sequence
+from typing import Any, Protocol
 
 
 @dataclass(frozen=True)
@@ -22,7 +21,9 @@ class DatasetManifest:
 class DriveClient(Protocol):
     """Minimal Google Drive boundary; implementations own OAuth and transport."""
 
-    def upload(self, name: str, content: bytes, *, folder_id: str | None = None, mime_type: str = "application/octet-stream") -> str: ...
+    def upload(
+        self, name: str, content: bytes, *, folder_id: str | None = None, mime_type: str = "application/octet-stream"
+    ) -> str: ...
 
 
 class LocalDriveMirror:
@@ -31,7 +32,9 @@ class LocalDriveMirror:
     def __init__(self, root: str | Path):
         self.root = Path(root)
 
-    def upload(self, name: str, content: bytes, *, folder_id: str | None = None, mime_type: str = "application/octet-stream") -> str:
+    def upload(
+        self, name: str, content: bytes, *, folder_id: str | None = None, mime_type: str = "application/octet-stream"
+    ) -> str:
         target = self.root / (folder_id or "root") / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
@@ -50,8 +53,13 @@ class GoogleDriveStorageAgent:
     def _checksum(content: bytes) -> str:
         return hashlib.sha256(content).hexdigest()
 
-    def write_jsonl(self, dataset: str, rows: Sequence[dict[str, Any]], *, as_of: str, schema_version: str = "1.0") -> DatasetManifest:
-        payload = b"".join((json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n") for row in rows)
+    def write_jsonl(
+        self, dataset: str, rows: Sequence[dict[str, Any]], *, as_of: str, schema_version: str = "1.0"
+    ) -> DatasetManifest:
+        payload = b"".join(
+            (json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n")
+            for row in rows
+        )
         checksum = self._checksum(payload)
         safe_date = as_of.replace(":", "-")
         name = f"{dataset}/date={safe_date}/{dataset}.jsonl"
@@ -65,7 +73,9 @@ class GoogleDriveStorageAgent:
         )
         return manifest
 
-    def write_snapshot(self, dataset: str, rows: Sequence[dict[str, Any]], *, as_of: str, schema_version: str = "1.0") -> DatasetManifest:
+    def write_snapshot(
+        self, dataset: str, rows: Sequence[dict[str, Any]], *, as_of: str, schema_version: str = "1.0"
+    ) -> DatasetManifest:
         return self.write_jsonl(dataset, rows, as_of=as_of, schema_version=schema_version)
 
     def validate_row_timestamps(self, rows: Sequence[dict[str, Any]]) -> None:

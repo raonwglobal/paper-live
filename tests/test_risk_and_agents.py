@@ -1,7 +1,8 @@
 from decimal import Decimal
+
 import pytest
 
-from paper_live import EnvironmentController, ExecutionEnvironmentMode, PaperOrderRequest, OrderSide, PaperAccount
+from paper_live import EnvironmentController, ExecutionEnvironmentMode, OrderSide, PaperAccount, PaperOrderRequest
 from paper_live.agents import AgentState, DebateOrchestratorAgent
 from paper_live.live_approval import LiveApprovalGate
 from paper_live.risk import RiskGuardian, RiskLimits
@@ -24,7 +25,15 @@ def test_circuit_breaker_blocks_order():
 
 
 def test_debate_produces_buy_when_bullish_signals_win():
-    state = AgentState("ABC", market={"macro_regime": "BULLISH", "fundamental_signal": "BUY", "technical_signal": "BUY", "sentiment_signal": "NEUTRAL"})
+    state = AgentState(
+        "ABC",
+        market={
+            "macro_regime": "BULLISH",
+            "fundamental_signal": "BUY",
+            "technical_signal": "BUY",
+            "sentiment_signal": "NEUTRAL",
+        },
+    )
     state = DebateOrchestratorAgent().run(state)
     assert state.decision["action"] == "BUY"
 
@@ -41,7 +50,9 @@ def test_skill_registry_enforces_environment():
 
 def test_live_mode_has_broker_allowlist_but_not_paper_gateway():
     secret = "s"
-    import hashlib, hmac
+    import hashlib
+    import hmac
+
     token = hmac.new(secret.encode(), b"environment-transition", hashlib.sha256).hexdigest()
     gate = LiveApprovalGate()
     gate.approve("test-operator", "test allowlist")

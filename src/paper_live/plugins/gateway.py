@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any
+
 from ..environment import EnvironmentController
 from .executor import PluginSkillExecutor, SkillExecutionError
 from .lifecycle import PluginLifecycle, PluginLifecycleError, PluginState
 from .policy import PluginExecutionPolicy
+
 
 @dataclass(frozen=True)
 class PluginCall:
@@ -12,11 +15,17 @@ class PluginCall:
     skill_id: str
     mode: str
 
+
 class PluginExecutionGateway:
     """Single fail-closed entry point for plugin skill execution."""
-    def __init__(self, lifecycle: PluginLifecycle, executor: PluginSkillExecutor,
-                 policy: PluginExecutionPolicy | None = None,
-                 environment: EnvironmentController | None = None):
+
+    def __init__(
+        self,
+        lifecycle: PluginLifecycle,
+        executor: PluginSkillExecutor,
+        policy: PluginExecutionPolicy | None = None,
+        environment: EnvironmentController | None = None,
+    ):
         self.lifecycle = lifecycle
         self.executor = executor
         self.policy = policy or PluginExecutionPolicy()

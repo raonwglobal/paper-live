@@ -1,16 +1,18 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
+from .execution import ExecutionGateway, OrderSide, PaperOrderRequest
 from .orchestrator_v2 import TradingGraph
-from .execution import ExecutionGateway, PaperOrderRequest, OrderSide
 from .pnl import PortfolioLedger, Side
-from .risk import RiskGuardian
 from .reflection import EpisodicMemory, SelfReflectionWorker, TradeEpisode
+from .risk import RiskGuardian
 from .state_machine import CycleState
+
 
 @dataclass(frozen=True)
 class PipelineResult:
@@ -20,15 +22,31 @@ class PipelineResult:
     executed: bool
     pnl: Decimal
 
+
 class TradingPipeline:
-    def __init__(self, gateway: ExecutionGateway, risk: RiskGuardian, memory: EpisodicMemory | None = None, ledger: PortfolioLedger | None = None):
+    def __init__(
+        self,
+        gateway: ExecutionGateway,
+        risk: RiskGuardian,
+        memory: EpisodicMemory | None = None,
+        ledger: PortfolioLedger | None = None,
+    ):
         self.graph = TradingGraph()
         self.gateway = gateway
         self.risk = risk
         self.ledger = ledger or PortfolioLedger()
         self.reflection = SelfReflectionWorker(memory or EpisodicMemory())
 
-    def _reflect(self, symbol: str, action: str, entry_price: Decimal, exit_price: Decimal, pnl: Decimal, market: dict[str, Any], outcome: str) -> None:
+    def _reflect(
+        self,
+        symbol: str,
+        action: str,
+        entry_price: Decimal,
+        exit_price: Decimal,
+        pnl: Decimal,
+        market: dict[str, Any],
+        outcome: str,
+    ) -> None:
         episode = TradeEpisode(
             episode_id=str(uuid4()),
             symbol=symbol,
@@ -38,7 +56,7 @@ class TradingPipeline:
             pnl=str(pnl),
             decision_context=market,
             outcome=outcome,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
         )
         self.reflection.reflect(episode)
 
@@ -56,7 +74,9 @@ class TradingPipeline:
             if fill.quantity <= 0 or fill.status == "REJECTED":
                 self._reflect(symbol, action, price, price, Decimal("0"), market, "REJECTED")
                 return PipelineResult(symbol, action, CycleState.REFLECTED, False, Decimal("0"))
-            self.ledger.apply_fill(symbol, Side.BUY if fill.side is OrderSide.BUY else Side.SELL, fill.quantity, fill.price)
+            self.ledger.apply_fill(
+                symbol, Side.BUY if fill.side is OrderSide.BUY else Side.SELL, fill.quantity, fill.price
+            )
             pnl = self.ledger.total_pnl(symbol, fill.price)
             self._reflect(symbol, action, fill.price, fill.price, pnl, market, fill.status)
             return PipelineResult(symbol, action, CycleState.REFLECTED, True, pnl)

@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
-from datetime import datetime, timezone
+
 
 @dataclass(frozen=True)
 class ReflectionRecord:
@@ -12,12 +14,13 @@ class ReflectionRecord:
     outcome: str
     timestamp: str
 
+
 class EpisodicMemory:
     def __init__(self):
         self._records: list[ReflectionRecord] = []
 
     def record(self, plugin_id: str, skill_id: str, symbol: str, pnl: Decimal, outcome: str) -> ReflectionRecord:
-        record = ReflectionRecord(plugin_id, skill_id, symbol, pnl, outcome, datetime.now(timezone.utc).isoformat())
+        record = ReflectionRecord(plugin_id, skill_id, symbol, pnl, outcome, datetime.now(UTC).isoformat())
         self._records.append(record)
         return record
 

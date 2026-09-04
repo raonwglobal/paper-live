@@ -10,6 +10,6 @@ Live approval is intentionally split:
 """
 
 from .live_approval_gate import LiveApprovalGate
-from .secrets import CredentialError, CredentialProvider, BrokerCredentials
+from .secrets import BrokerCredentials, CredentialError, CredentialProvider
 
 __all__ = ["LiveApprovalGate", "CredentialError", "CredentialProvider", "BrokerCredentials"]

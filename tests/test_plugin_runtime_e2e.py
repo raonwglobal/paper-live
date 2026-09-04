@@ -1,6 +1,7 @@
 from decimal import Decimal
+
 from paper_live.environment import EnvironmentController, ExecutionEnvironmentMode
-from paper_live.execution import ExecutionGateway, PaperOrderRequest, OrderSide, PaperAccount, VirtualMatchingEngine
+from paper_live.execution import ExecutionGateway, OrderSide, PaperAccount, PaperOrderRequest, VirtualMatchingEngine
 from paper_live.order_lifecycle import OrderLifecycle
 from paper_live.plugins.executor import PluginSkillExecutor
 from paper_live.plugins.integration import PluginExecutionRequest, PluginRuntime
@@ -15,9 +16,14 @@ def build():
     engine = VirtualMatchingEngine(account)
     execution = ExecutionGateway(env, engine, OrderLifecycle())
     risk = RiskGuardian(env, account)
-    lifecycle = PluginLifecycle(); lifecycle.add(PluginRecord("demo", "1.0.0", "abcdef1", "hash")); lifecycle.verify("demo"); lifecycle.enable("demo")
-    registry = SkillRegistry(); registry.register(RegisteredSkill("signal.quote", "demo", "1.0.0", "skills/quote.py"))
-    executor = PluginSkillExecutor(registry); executor.bind("signal.quote", lambda symbol: {"symbol": symbol, "side": "BUY"})
+    lifecycle = PluginLifecycle()
+    lifecycle.add(PluginRecord("demo", "1.0.0", "abcdef1", "hash"))
+    lifecycle.verify("demo")
+    lifecycle.enable("demo")
+    registry = SkillRegistry()
+    registry.register(RegisteredSkill("signal.quote", "demo", "1.0.0", "skills/quote.py"))
+    executor = PluginSkillExecutor(registry)
+    executor.bind("signal.quote", lambda symbol: {"symbol": symbol, "side": "BUY"})
     return env, account, PluginRuntime(lifecycle, registry, executor, env, risk, execution)
 
 

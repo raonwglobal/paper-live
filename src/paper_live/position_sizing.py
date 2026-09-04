@@ -1,12 +1,15 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from decimal import Decimal
+
 
 @dataclass(frozen=True)
 class PositionSizingConfig:
     risk_fraction: Decimal = Decimal("0.01")
     max_notional_fraction: Decimal = Decimal("0.20")
     min_quantity: Decimal = Decimal("1")
+
 
 class PositionSizer:
     def __init__(self, config: PositionSizingConfig | None = None):

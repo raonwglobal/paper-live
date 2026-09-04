@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 from threading import RLock
+
 
 class PluginState(str, Enum):
     INSTALLED = "installed"
@@ -10,8 +12,10 @@ class PluginState(str, Enum):
     DISABLED = "disabled"
     REMOVED = "removed"
 
+
 class PluginLifecycleError(RuntimeError):
     pass
+
 
 @dataclass
 class PluginRecord:
@@ -20,6 +24,7 @@ class PluginRecord:
     commit: str
     artifact_sha256: str
     state: PluginState = PluginState.INSTALLED
+
 
 class PluginLifecycle:
     def __init__(self):

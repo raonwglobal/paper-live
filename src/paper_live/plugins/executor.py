@@ -1,11 +1,16 @@
 from __future__ import annotations
+
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
+
 from .sandbox import PluginSandbox
-from .skill_registry import SkillRegistry, SkillRegistryError
+from .skill_registry import SkillRegistry
+
 
 class SkillExecutionError(RuntimeError):
     pass
+
 
 @dataclass(frozen=True)
 class ExecutionContext:
@@ -13,12 +18,14 @@ class ExecutionContext:
     skill_id: str
     mode: str
 
+
 class PluginSkillExecutor:
     """Executes only registered, explicitly bound skill callables.
 
     Arbitrary module import and subprocess execution are intentionally absent.
     A container executor can replace the callable backend without changing the registry contract.
     """
+
     def __init__(self, registry: SkillRegistry, sandbox: PluginSandbox | None = None):
         self.registry = registry
         self.sandbox = sandbox or PluginSandbox()

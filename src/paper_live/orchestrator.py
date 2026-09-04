@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable
 
 from .agents import Agent, AgentState
 
@@ -10,7 +9,7 @@ from .agents import Agent, AgentState
 class StateGraph:
     nodes: list[Agent] = field(default_factory=list)
 
-    def add_node(self, agent: Agent) -> "StateGraph":
+    def add_node(self, agent: Agent) -> StateGraph:
         self.nodes.append(agent)
         return self
 
@@ -23,11 +22,20 @@ class StateGraph:
 
 
 def build_analysis_graph() -> StateGraph:
-    from .agents import MacroRegimeAgent, FundamentalAnalystAgent, TechnicalVisionAgent, SentimentQuantAgent, DebateOrchestratorAgent
-    return StateGraph([
-        MacroRegimeAgent(),
-        FundamentalAnalystAgent(),
-        TechnicalVisionAgent(),
-        SentimentQuantAgent(),
-        DebateOrchestratorAgent(),
-    ])
+    from .agents import (
+        DebateOrchestratorAgent,
+        FundamentalAnalystAgent,
+        MacroRegimeAgent,
+        SentimentQuantAgent,
+        TechnicalVisionAgent,
+    )
+
+    return StateGraph(
+        [
+            MacroRegimeAgent(),
+            FundamentalAnalystAgent(),
+            TechnicalVisionAgent(),
+            SentimentQuantAgent(),
+            DebateOrchestratorAgent(),
+        ]
+    )

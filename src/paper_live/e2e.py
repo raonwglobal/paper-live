@@ -4,8 +4,15 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-from .agents import AgentState, DebateOrchestratorAgent, MacroRegimeAgent, FundamentalAnalystAgent, TechnicalVisionAgent, SentimentQuantAgent
-from .execution import ExecutionGateway, PaperOrderRequest, OrderSide
+from .agents import (
+    AgentState,
+    DebateOrchestratorAgent,
+    FundamentalAnalystAgent,
+    MacroRegimeAgent,
+    SentimentQuantAgent,
+    TechnicalVisionAgent,
+)
+from .execution import ExecutionGateway, OrderSide, PaperOrderRequest
 from .risk import RiskGuardian
 
 
@@ -23,7 +30,12 @@ class PaperTradingCycle:
     def __init__(self, gateway: ExecutionGateway, risk: RiskGuardian):
         self.gateway = gateway
         self.risk = risk
-        self.signal_agents = [MacroRegimeAgent(), FundamentalAnalystAgent(), TechnicalVisionAgent(), SentimentQuantAgent()]
+        self.signal_agents = [
+            MacroRegimeAgent(),
+            FundamentalAnalystAgent(),
+            TechnicalVisionAgent(),
+            SentimentQuantAgent(),
+        ]
         self.debate = DebateOrchestratorAgent()
 
     def run(self, symbol: str, market: dict[str, Any], quantity: Decimal, price: Decimal) -> PaperCycleResult:

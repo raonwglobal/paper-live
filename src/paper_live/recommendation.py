@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, dataclass
 from math import isfinite
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -66,7 +67,16 @@ class StockRecommendationAgent:
         present = sum(key in row for key in self.weights)
         confidence = max(0.0, min(100.0, 100.0 - dispersion * 0.45)) * (present / len(self.weights))
         reasons = tuple(key.removesuffix("_score").upper() for key in self.weights if self._score(row.get(key)) >= 70)
-        return Recommendation(symbol, round(weighted, 4), 0, self.grade(weighted), round(confidence, 2), reasons, self.model_version, as_of)
+        return Recommendation(
+            symbol,
+            round(weighted, 4),
+            0,
+            self.grade(weighted),
+            round(confidence, 2),
+            reasons,
+            self.model_version,
+            as_of,
+        )
 
     @staticmethod
     def grade(score: float) -> str:
@@ -86,5 +96,18 @@ class StockRecommendationAgent:
         results.sort(key=lambda item: (-item.score, item.symbol))
         ranked = []
         for index, item in enumerate(results, 1):
-            ranked.append(asdict(Recommendation(item.symbol, item.score, index, item.grade, item.confidence, item.reasons, item.model_version, item.data_as_of)))
+            ranked.append(
+                asdict(
+                    Recommendation(
+                        item.symbol,
+                        item.score,
+                        index,
+                        item.grade,
+                        item.confidence,
+                        item.reasons,
+                        item.model_version,
+                        item.data_as_of,
+                    )
+                )
+            )
         return ranked

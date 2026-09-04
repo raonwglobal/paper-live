@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from threading import RLock
 
+
 class SkillRegistryError(RuntimeError):
     pass
+
 
 @dataclass(frozen=True)
 class RegisteredSkill:
@@ -11,6 +14,7 @@ class RegisteredSkill:
     plugin_id: str
     version: str
     entrypoint: str
+
 
 class SkillRegistry:
     def __init__(self):

@@ -1,14 +1,18 @@
-from decimal import Decimal
 import hashlib
 import hmac
+from decimal import Decimal
+
 import pytest
+
 from paper_live.environment import EnvironmentController, EnvironmentTransitionError, ExecutionEnvironmentMode
-from paper_live.execution import ExecutionGateway, PaperOrderRequest, OrderSide, PaperAccount, VirtualMatchingEngine
+from paper_live.execution import ExecutionGateway, OrderSide, PaperAccount, PaperOrderRequest, VirtualMatchingEngine
 from paper_live.live_approval import LiveApprovalGate
 from paper_live.risk import RiskGuardian, RiskLimits
 
+
 def _token(secret: str) -> str:
     return hmac.new(secret.encode(), b"environment-transition", hashlib.sha256).hexdigest()
+
 
 def test_paper_gateway_fail_closed_in_live_mode_even_after_approval():
     secret = "secret"
@@ -18,7 +22,10 @@ def test_paper_gateway_fail_closed_in_live_mode_even_after_approval():
     controller.set_mode(ExecutionEnvironmentMode.REAL_LIVE, _token(secret))
     gateway = ExecutionGateway(controller, VirtualMatchingEngine(PaperAccount(Decimal("10000"))))
     with pytest.raises(EnvironmentTransitionError):
-        gateway.execute(PaperOrderRequest("ABC", OrderSide.BUY, Decimal("1"), client_order_id="live-block"), Decimal("100"))
+        gateway.execute(
+            PaperOrderRequest("ABC", OrderSide.BUY, Decimal("1"), client_order_id="live-block"), Decimal("100")
+        )
+
 
 def test_risk_circuit_breaker_blocks_order():
     controller = EnvironmentController()
@@ -30,6 +37,7 @@ def test_risk_circuit_breaker_blocks_order():
     risk.circuit_breaker.trip()
     with pytest.raises(PermissionError):
         risk.approve(PaperOrderRequest("ABC", OrderSide.BUY, Decimal("1"), client_order_id="risk-2"), Decimal("1"))
+
 
 def test_paper_engine_rejects_insufficient_cash():
     engine = VirtualMatchingEngine(PaperAccount(Decimal("10")), slippage_bps=Decimal("0"))

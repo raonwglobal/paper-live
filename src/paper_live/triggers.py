@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from .environment import EnvironmentController, ExecutionEnvironmentMode
 
@@ -27,9 +26,11 @@ class TriggerEvaluator:
         return TriggerDecision(target, f"KPI {metric} reached {value}", target is ExecutionEnvironmentMode.REAL_LIVE)
 
     def evaluate_time(self, now: datetime | None = None) -> TriggerDecision:
-        current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+        current = (now or datetime.now(UTC)).astimezone(UTC)
         for target_time, mode in list(self.controller._time_triggers.items()):
-            target = datetime.fromisoformat(target_time.replace("Z", "+00:00")).astimezone(timezone.utc)
+            target = datetime.fromisoformat(target_time.replace("Z", "+00:00")).astimezone(UTC)
             if current >= target:
-                return TriggerDecision(mode, f"time trigger reached: {target.isoformat()}", mode is ExecutionEnvironmentMode.REAL_LIVE)
+                return TriggerDecision(
+                    mode, f"time trigger reached: {target.isoformat()}", mode is ExecutionEnvironmentMode.REAL_LIVE
+                )
         return TriggerDecision(None, "time trigger not reached", False)
