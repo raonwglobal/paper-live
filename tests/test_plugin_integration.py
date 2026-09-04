@@ -1,7 +1,7 @@
 from decimal import Decimal
 import pytest
 from paper_live.environment import EnvironmentController, ExecutionEnvironmentMode
-from paper_live.execution import ExecutionGateway, OrderRequest, OrderSide, PaperAccount, VirtualMatchingEngine
+from paper_live.execution import ExecutionGateway, PaperOrderRequest, OrderSide, PaperAccount, VirtualMatchingEngine
 from paper_live.risk import RiskGuardian
 from paper_live.plugins.executor import PluginSkillExecutor
 from paper_live.plugins.integration import PluginExecutionRequest, PluginRuntime
@@ -22,14 +22,14 @@ def test_plugin_invocation_and_paper_order_share_environment():
     rt = runtime()
     request = PluginExecutionRequest("demo", "signal", ExecutionEnvironmentMode.PAPER_SANDBOX)
     assert rt.invoke(request) == {"signal": "BUY"}
-    order = OrderRequest("005930", OrderSide.BUY, Decimal("10"), client_order_id="plugin-order-1")
+    order = PaperOrderRequest("005930", OrderSide.BUY, Decimal("10"), client_order_id="plugin-order-1")
     fill = rt.submit_paper_order(request, order, Decimal("1000"))
     assert fill.quantity == Decimal("10")
 
 def test_plugin_live_order_is_rejected():
     rt = runtime()
     request = PluginExecutionRequest("demo", "signal", ExecutionEnvironmentMode.REAL_LIVE)
-    order = OrderRequest("005930", OrderSide.BUY, Decimal("1"), client_order_id="plugin-live-1")
+    order = PaperOrderRequest("005930", OrderSide.BUY, Decimal("1"), client_order_id="plugin-live-1")
     with pytest.raises(PermissionError): rt.submit_paper_order(request, order, Decimal("1000"))
 
 def test_plugin_mode_mismatch_is_rejected():

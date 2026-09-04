@@ -1,6 +1,6 @@
 from decimal import Decimal
 from paper_live.environment import EnvironmentController, ExecutionEnvironmentMode
-from paper_live.execution import ExecutionGateway, OrderRequest, OrderSide, PaperAccount, VirtualMatchingEngine
+from paper_live.execution import ExecutionGateway, PaperOrderRequest, OrderSide, PaperAccount, VirtualMatchingEngine
 from paper_live.order_lifecycle import OrderLifecycle
 from paper_live.plugins.executor import PluginSkillExecutor
 from paper_live.plugins.integration import PluginExecutionRequest, PluginRuntime
@@ -25,7 +25,7 @@ def test_plugin_signal_reaches_paper_only_through_risk_and_gateway():
     env, account, runtime = build()
     request = PluginExecutionRequest("demo", "signal.quote", ExecutionEnvironmentMode.PAPER_SANDBOX)
     assert runtime.invoke(request, symbol="005930")["side"] == "BUY"
-    order = OrderRequest("005930", OrderSide.BUY, Decimal("10"), client_order_id="plugin-e2e-1")
+    order = PaperOrderRequest("005930", OrderSide.BUY, Decimal("10"), client_order_id="plugin-e2e-1")
     fill = runtime.submit_paper_order(request, order, Decimal("1000"))
     assert fill.quantity == Decimal("10")
     assert account.positions["005930"] == Decimal("10")

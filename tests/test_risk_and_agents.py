@@ -1,7 +1,7 @@
 from decimal import Decimal
 import pytest
 
-from paper_live import EnvironmentController, ExecutionEnvironmentMode, OrderRequest, OrderSide, PaperAccount
+from paper_live import EnvironmentController, ExecutionEnvironmentMode, PaperOrderRequest, OrderSide, PaperAccount
 from paper_live.agents import AgentState, DebateOrchestratorAgent
 from paper_live.live_approval import LiveApprovalGate
 from paper_live.risk import RiskGuardian, RiskLimits
@@ -12,7 +12,7 @@ def test_risk_rejects_oversized_order():
     c = EnvironmentController()
     r = RiskGuardian(c, PaperAccount(Decimal("100000")), RiskLimits(max_order_notional=Decimal("1000")))
     with pytest.raises(PermissionError):
-        r.approve(OrderRequest("ABC", OrderSide.BUY, Decimal("2")), Decimal("1000"))
+        r.approve(PaperOrderRequest("ABC", OrderSide.BUY, Decimal("2")), Decimal("1000"))
 
 
 def test_circuit_breaker_blocks_order():
@@ -20,7 +20,7 @@ def test_circuit_breaker_blocks_order():
     r = RiskGuardian(c, PaperAccount(Decimal("100000")))
     r.circuit_breaker.trip()
     with pytest.raises(PermissionError):
-        r.approve(OrderRequest("ABC", OrderSide.BUY, Decimal("1")), Decimal("10"))
+        r.approve(PaperOrderRequest("ABC", OrderSide.BUY, Decimal("1")), Decimal("10"))
 
 
 def test_debate_produces_buy_when_bullish_signals_win():

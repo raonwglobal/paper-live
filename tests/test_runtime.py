@@ -9,7 +9,7 @@ from paper_live import (
     EnvironmentTransitionError,
     ExecutionEnvironmentMode,
     ExecutionGateway,
-    OrderRequest,
+    PaperOrderRequest,
     OrderSide,
     PaperAccount,
     VirtualMatchingEngine,
@@ -52,12 +52,12 @@ def test_paper_buy_and_sell_ledger():
     account = PaperAccount(cash=Decimal("100000"))
     engine = VirtualMatchingEngine(account)
     buy = engine.execute(
-        OrderRequest("005930", OrderSide.BUY, Decimal("10"), client_order_id="b1"),
+        PaperOrderRequest("005930", OrderSide.BUY, Decimal("10"), client_order_id="b1"),
         Decimal("7000"),
     )
     assert buy.quantity == Decimal("10")
     assert account.positions["005930"] == Decimal("10")
-    engine.execute(OrderRequest("005930", OrderSide.SELL, Decimal("10"), client_order_id="s1"), Decimal("7100"))
+    engine.execute(PaperOrderRequest("005930", OrderSide.SELL, Decimal("10"), client_order_id="s1"), Decimal("7100"))
     assert account.positions["005930"] == Decimal("0")
 
 
@@ -69,4 +69,4 @@ def test_gateway_refuses_live_execution():
     c.set_mode(ExecutionEnvironmentMode.REAL_LIVE, TOKEN)
     gateway = ExecutionGateway(c, VirtualMatchingEngine(PaperAccount(Decimal("100000"))))
     with pytest.raises(EnvironmentTransitionError):
-        gateway.execute(OrderRequest("005930", OrderSide.BUY, Decimal("1"), client_order_id="live-test"), Decimal("7000"))
+        gateway.execute(PaperOrderRequest("005930", OrderSide.BUY, Decimal("1"), client_order_id="live-test"), Decimal("7000"))
