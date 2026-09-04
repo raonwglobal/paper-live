@@ -1,5 +1,5 @@
 from __future__ import annotations
-from .protocol import BrokerAdapter, OrderRequest, OrderResult, LiveBrokerDenied
+from .protocol import BrokerAdapter, BrokerOrderRequest, OrderResult, LiveBrokerDenied
 from paper_live.security.live_approval_gate import LiveApprovalGate
 
 class BrokerRouter:
@@ -14,7 +14,7 @@ class BrokerRouter:
             raise LiveBrokerDenied("explicit live approval is required")
         self.approval_gate.require(approval_id)
 
-    def submit(self, mode: str, broker: str, request: OrderRequest, approval_id: str | None = None) -> OrderResult:
+    def submit(self, mode: str, broker: str, request: BrokerOrderRequest, approval_id: str | None = None) -> OrderResult:
         self._authorize(mode, approval_id)
         adapter = self.adapters.get(broker)
         if adapter is None:

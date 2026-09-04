@@ -5,16 +5,19 @@ individual broker adapters must not be shadowed by a legacy ``brokers.py``
 module.
 """
 
-from .protocol import BrokerAdapter, OrderRequest, OrderResult, LiveBrokerDenied
+from .protocol import BrokerAdapter, BrokerOrderRequest, OrderResult, LiveBrokerDenied
 from .safe_router import BrokerRouter
 from .toss import TossBrokerAdapter, TossCredentials, TossApiError
 from .kb import KbBrokerAdapter, KbCredentials, KbApiError
 
 # Backward-compatible spelling used by older callers.
 KBBrokerAdapter = KbBrokerAdapter
+# Backward-compatible alias for the order DTO.
+OrderRequest = BrokerOrderRequest
 
 __all__ = [
     "BrokerAdapter",
+    "BrokerOrderRequest",
     "OrderRequest",
     "OrderResult",
     "LiveBrokerDenied",
