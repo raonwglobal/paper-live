@@ -16,13 +16,18 @@ class OrderType(str, Enum):
     LIMIT = "LIMIT"
 
 @dataclass(frozen=True)
-class OrderRequest:
+class PaperOrderRequest:
+    """Paper/backtest order intent for VirtualMatchingEngine and RiskGuardian."""
     symbol: str
     side: OrderSide
     quantity: Decimal
     order_type: OrderType = OrderType.MARKET
     limit_price: Decimal | None = None
     client_order_id: str = ""
+
+
+# Backward-compatible alias (prefer PaperOrderRequest in new code).
+OrderRequest = PaperOrderRequest
 
 @dataclass(frozen=True)
 class Fill:
@@ -49,7 +54,7 @@ class VirtualMatchingEngine:
         self.slippage_bps = slippage_bps
         self.max_fill_ratio = max_fill_ratio
 
-    def execute(self, order: OrderRequest, market_price: Decimal, available_quantity: Decimal | None = None) -> Fill:
+    def execute(self, order: PaperOrderRequest, market_price: Decimal, available_quantity: Decimal | None = None) -> Fill:
         if order.quantity <= 0 or market_price <= 0:
             raise ValueError("quantity and market_price must be positive")
         if self.slippage_bps < 0 or self.max_fill_ratio <= 0 or self.max_fill_ratio > 1:
@@ -93,7 +98,7 @@ class ExecutionGateway:
         self.paper = paper
         self.lifecycle = lifecycle or OrderLifecycle()
 
-    def execute(self, order: OrderRequest, market_price: Decimal, available_quantity: Decimal | None = None) -> Fill:
+    def execute(self, order: PaperOrderRequest, market_price: Decimal, available_quantity: Decimal | None = None) -> Fill:
         mode = self.controller.get_current_mode()
         if mode not in {ExecutionEnvironmentMode.PAPER_SANDBOX, ExecutionEnvironmentMode.VIRTUAL_BACKTEST}:
             raise EnvironmentTransitionError("REAL_LIVE execution requires an explicitly authorized broker adapter; paper gateway refuses it")
@@ -109,7 +114,7 @@ class ExecutionGateway:
             remaining = order.quantity - existing.filled_quantity
             if remaining <= 0:
                 return Fill(order.client_order_id, order.symbol, order.side, existing.filled_quantity, market_price, Decimal("0"), Decimal("0"), existing.status.value)
-            effective_order = OrderRequest(order.symbol, order.side, remaining, order.order_type, order.limit_price, order.client_order_id)
+            effective_order = PaperOrderRequest(order.symbol, order.side, remaining, order.order_type, order.limit_price, order.client_order_id)
         else:
             self.lifecycle.submit(OrderRecord(order.client_order_id, order.symbol, order.side.value, order.quantity))
             effective_order = order
