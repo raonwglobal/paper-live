@@ -112,9 +112,13 @@ class GoogleDriveSecretStore:
 
     def _upload(self, blob: bytes) -> str:
         boundary = "paperlive-" + pysecrets.token_hex(12)
-        metadata = json.dumps({"name": self.FILE_NAME}).encode()
-        body = (f"--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n".encode() + metadata + f"\r\n--{boundary}\r\nContent-Type: application/octet-stream\r\n\r\n".encode() + blob + f"\r\n--{boundary}--\r\n".encode())
-        result = json.loads(self._request("POST", f"https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", body, f"multipart/related; boundary={boundary}"))
+        folder_id = os.getenv("GOOGLE_DRIVE_SECRET_FOLDER_ID")
+        metadata = {"name": self.FILE_NAME}
+        if folder_id:
+            metadata["parents"] = [folder_id]
+        metadata_bytes = json.dumps(metadata).encode()
+        body = (f"--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n".encode() + metadata_bytes + f"\r\n--{boundary}\r\nContent-Type: application/octet-stream\r\n\r\n".encode() + blob + f"\r\n--{boundary}--\r\n".encode())
+        result = json.loads(self._request("POST", f"https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", body, f"multipart/related; boundary={boundary}"))
         self.file_id = result["id"]
         return self.file_id
 
@@ -127,8 +131,16 @@ class GoogleDriveSecretStore:
             raise KeyError(secret_id)
         records = self._decrypt(self._request("GET", f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?alt=media"))
         for record in records:
-            if record.secret_id == secret_id and record.status == "active":
-                return record.value
+            if record.secret_id != secret_id or record.status != "active":
+                continue
+            if record.expires_at:
+                try:
+                    expires = datetime.fromisoformat(record.expires_at.replace("Z", "+00:00"))
+                except ValueError as exc:
+                    raise RuntimeError("invalid secret expiration metadata") from exc
+                if expires <= datetime.now(timezone.utc):
+                    raise KeyError(secret_id)
+            return record.value
         raise KeyError(secret_id)
 
     def put(self, record: SecretRecord) -> None:
