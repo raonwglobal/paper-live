@@ -13,6 +13,7 @@ from .execution import (
 )
 from .orchestrator import StateGraph, build_analysis_graph
 from .reflection import EpisodicMemory, SelfReflectionWorker, TradeEpisode
+from .trade_facade import InternalTradeFacade, OrderIntent, OrderPreview, RiskAssessment
 
 __all__ = [
     "EnvironmentController",
@@ -41,4 +42,8 @@ __all__ = [
     "TradeEpisode",
     "StateGraph",
     "build_analysis_graph",
+    "InternalTradeFacade",
+    "OrderIntent",
+    "OrderPreview",
+    "RiskAssessment",
 ]

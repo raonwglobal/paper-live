@@ -35,3 +35,18 @@ class SecretBroker:
     def resolve(self, *, secret_id: str, mode: str, capability: str) -> str:
         self._policy.authorize(secret_id=secret_id, mode=mode, capability=capability)
         return self._store.get(secret_id)
+
+
+class InMemorySecretStore:
+    """Dict-backed store for tests and local wiring without Drive."""
+
+    def __init__(self, values: dict[str, str] | None = None):
+        self._values = dict(values or {})
+
+    def get(self, secret_id: str) -> str:
+        if secret_id not in self._values:
+            raise KeyError(secret_id)
+        return self._values[secret_id]
+
+    def put(self, secret_id: str, value: str) -> None:
+        self._values[secret_id] = value
