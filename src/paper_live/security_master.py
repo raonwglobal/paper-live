@@ -20,9 +20,9 @@ class Security:
 class SecurityMaster:
     """Canonical instrument registry used by ingestion, screening and execution."""
 
-    def __init__(self, securities: Sequence[Security] = ())):
+    def __init__(self, securities: Sequence[Security] | None = None):
         self._items: dict[tuple[str, str], Security] = {}
-        self.replace(securities)
+        self.replace(securities or ())
 
     def replace(self, securities: Iterable[Security]) -> None:
         items = {}
