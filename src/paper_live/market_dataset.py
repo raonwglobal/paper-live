@@ -97,7 +97,12 @@ class DailyDatasetBuilder:
         for row in rows:
             if not row.available_at:
                 raise ValueError("daily price row requires available_at")
-            if row.available_at < row.trade_date:
+            try:
+                available = datetime.fromisoformat(row.available_at.replace("Z", "+00:00"))
+                effective = date.fromisoformat(row.trade_date)
+            except ValueError as exc:
+                raise ValueError("invalid trade_date or available_at") from exc
+            if available.date() < effective:
                 raise ValueError("available_at cannot precede trade_date")
             unique[(row.market, row.symbol, row.trade_date)] = row
         ordered = sorted(unique.values(), key=lambda r: (r.market, r.symbol, r.trade_date))
