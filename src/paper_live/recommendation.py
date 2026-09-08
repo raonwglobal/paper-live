@@ -91,8 +91,8 @@ class StockRecommendationAgent:
         return "E"
 
     def rank(self, rows: Sequence[Mapping[str, Any]], *, data_as_of: str) -> list[dict[str, Any]]:
-        results = [self.score(row, data_as_of=data_as_of) for row in rows]
-        results = [item for item in results if item is not None]
+        scored = [self.score(row, data_as_of=data_as_of) for row in rows]
+        results: list[Recommendation] = [item for item in scored if item is not None]
         results.sort(key=lambda item: (-item.score, item.symbol))
         ranked = []
         for index, item in enumerate(results, 1):
