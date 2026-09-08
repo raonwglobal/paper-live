@@ -34,9 +34,6 @@ class RateLimiter:
             self.sleeper(self.delay)
         self._first = False
 
-    def collect_placeholder(self) -> None:
-        return None
-
 
 class ResilientDailyCollector:
     def __init__(
