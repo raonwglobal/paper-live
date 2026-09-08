@@ -100,9 +100,9 @@ class InternalTradeFacade:
     def to_broker_order(self, intent: OrderIntent) -> BrokerOrderRequest:
         return BrokerOrderRequest(
             symbol=intent.symbol,
-            side=intent.normalized_side().value.lower(),
+            side=intent.normalized_side().value,  # BUY|SELL
             quantity=intent.quantity,
-            order_type=intent.normalized_order_type().value.lower(),
+            order_type=intent.normalized_order_type().value,  # MARKET|LIMIT
         )
 
     def _estimate_notional(self, intent: OrderIntent, reference_price: Decimal) -> Decimal:
@@ -150,7 +150,7 @@ class InternalTradeFacade:
         self._previews[preview_id] = preview
         return preview
 
-    def _resolve_live_secret(self, intent: OrderIntent) -> str:
+    def _resolve_live_secret(self, intent: OrderIntent, *, capability: str = "order.create") -> str:
         if self.secret_broker is None:
             raise PermissionError("SecretBroker is required for REAL_LIVE submit")
         secret_id = self.broker_secret_ids.get(intent.broker)
@@ -160,7 +160,7 @@ class InternalTradeFacade:
         return self.secret_broker.resolve(
             secret_id=secret_id,
             mode=ExecutionEnvironmentMode.REAL_LIVE.value,
-            capability="order.create",
+            capability=capability,
         )
 
     def submit(
@@ -185,19 +185,74 @@ class InternalTradeFacade:
             raise PermissionError("; ".join(risk.violations) or "risk rejected")
 
         if mode is ExecutionEnvironmentMode.REAL_LIVE:
-            if self.broker_router is None:
-                raise PermissionError("BrokerRouter is not configured")
-            if self.order_approval_gate is None or approval_id is None:
-                raise PermissionError("explicit live approval_id is required")
-            self.order_approval_gate.require(approval_id)
-            # Gate credentials before touching the broker adapter.
-            _credential = self._resolve_live_secret(intent)
-            del _credential  # do not retain in facade locals longer than needed
-            request = self.to_broker_order(intent)
-            return self.broker_router.submit(mode.value, intent.broker, request, approval_id)
+            return self._submit_live(intent, approval_id=approval_id)
 
         paper_order = self.to_paper_order(intent)
         return self.gateway.execute(paper_order, reference_price)
+
+    def _adapter_for(self, broker: str):
+        if self.broker_router is None:
+            raise PermissionError("BrokerRouter is not configured")
+        adapter = self.broker_router.adapters.get(broker)
+        if adapter is None:
+            raise PermissionError(f"broker adapter is not configured: {broker}")
+        return adapter
+
+    def _inject_credentials(self, intent: OrderIntent, *, capability: str = "order.create") -> object:
+        """Resolve secret material and apply when the adapter supports injection.
+
+        Resolve is always required (policy gate). Adapters without
+        apply_secret_material still pass the gate (e.g. test doubles).
+        """
+        material = self._resolve_live_secret(intent, capability=capability)
+        adapter = self._adapter_for(intent.broker)
+        apply = getattr(adapter, "apply_secret_material", None)
+        if apply is not None:
+            apply(material)
+        return adapter
+
+    def _submit_live(self, intent: OrderIntent, *, approval_id: str | None) -> OrderResult:
+        if self.broker_router is None:
+            raise PermissionError("BrokerRouter is not configured")
+        if self.order_approval_gate is None or approval_id is None:
+            raise PermissionError("explicit live approval_id is required")
+        self.order_approval_gate.require(approval_id)
+        adapter = self._inject_credentials(intent)
+        try:
+            request = self.to_broker_order(intent)
+            return self.broker_router.submit(
+                ExecutionEnvironmentMode.REAL_LIVE.value, intent.broker, request, approval_id
+            )
+        finally:
+            clear = getattr(adapter, "clear_secret_material", None)
+            if clear is not None:
+                clear()
+
+    def cancel(
+        self,
+        *,
+        broker: str,
+        order_id: str,
+        approval_id: str | None = None,
+    ) -> bool:
+        """Cancel a live order; paper path has no remote cancel (lifecycle only)."""
+        mode = self.controller.get_current_mode()
+        if mode is not ExecutionEnvironmentMode.REAL_LIVE:
+            raise PermissionError("cancel via broker is only available in REAL_LIVE")
+        if self.broker_router is None:
+            raise PermissionError("BrokerRouter is not configured")
+        if self.order_approval_gate is None or approval_id is None:
+            raise PermissionError("explicit live approval_id is required")
+        self.order_approval_gate.require(approval_id)
+        # Reuse broker secret mapping with a synthetic intent for resolve.
+        intent = OrderIntent(symbol="-", side="BUY", quantity=Decimal("1"), broker=broker)
+        adapter = self._inject_credentials(intent, capability="order.cancel")
+        try:
+            return self.broker_router.cancel(mode.value, broker, order_id, approval_id)
+        finally:
+            clear = getattr(adapter, "clear_secret_material", None)
+            if clear is not None:
+                clear()
 
     def snapshot(self) -> dict[str, Any]:
         mode = self.controller.get_current_mode()
