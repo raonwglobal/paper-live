@@ -13,7 +13,14 @@ class BrokerMarketDataError(RuntimeError):
     pass
 
 
-def _json_request(url: str, *, method: str = "GET", headers: dict[str, str] | None = None, body: bytes | None = None, timeout: int = 20):
+def _json_request(
+    url: str,
+    *,
+    method: str = "GET",
+    headers: dict[str, str] | None = None,
+    body: bytes | None = None,
+    timeout: int = 20,
+):
     req = Request(url, method=method, headers=headers or {}, data=body)
     try:
         with urlopen(req, timeout=timeout) as response:
@@ -30,20 +37,26 @@ class TossCredentials:
 
 
 class TossTokenProvider:
-    def __init__(self, credentials: TossCredentials, base_url: str = "https://openapi.tossinvest.com", timeout: int = 20):
+    def __init__(
+        self, credentials: TossCredentials, base_url: str = "https://openapi.tossinvest.com", timeout: int = 20
+    ):
         self.credentials, self.base_url, self.timeout = credentials, base_url.rstrip("/"), timeout
         self._token: str | None = None
 
     def token(self) -> str:
-        form = urlencode({
-            "grant_type": "client_credentials",
-            "client_id": self.credentials.client_id,
-            "client_secret": self.credentials.client_secret,
-        }).encode()
+        form = urlencode(
+            {
+                "grant_type": "client_credentials",
+                "client_id": self.credentials.client_id,
+                "client_secret": self.credentials.client_secret,
+            }
+        ).encode()
         payload = _json_request(
-            self.base_url + "/oauth2/token", method="POST",
+            self.base_url + "/oauth2/token",
+            method="POST",
             headers={"Content-Type": "application/x-www-form-urlencoded"},
-            body=form, timeout=self.timeout,
+            body=form,
+            timeout=self.timeout,
         )
         token = payload.get("access_token")
         if not token:
@@ -73,7 +86,10 @@ class TossDailyPriceProvider(DailyPriceProvider):
         before: str | None = None
         for _ in range(100):
             params: dict[str, str | int | bool] = {
-                "symbol": symbol, "interval": "1d", "count": 200, "adjusted": self.adjusted,
+                "symbol": symbol,
+                "interval": "1d",
+                "count": 200,
+                "adjusted": self.adjusted,
             }
             if before:
                 params["before"] = before
@@ -90,13 +106,19 @@ class TossDailyPriceProvider(DailyPriceProvider):
                     reached_older = True
                     continue
                 if day <= end_date:
-                    rows.append({
-                        "symbol": symbol, "trade_date": day.isoformat(),
-                        "open": candle.get("openPrice"), "high": candle.get("highPrice"),
-                        "low": candle.get("lowPrice"), "close": candle.get("closePrice"),
-                        "volume": candle.get("volume"), "currency": candle.get("currency"),
-                        "adjusted_close": candle.get("closePrice") if self.adjusted else None,
-                    })
+                    rows.append(
+                        {
+                            "symbol": symbol,
+                            "trade_date": day.isoformat(),
+                            "open": candle.get("openPrice"),
+                            "high": candle.get("highPrice"),
+                            "low": candle.get("lowPrice"),
+                            "close": candle.get("closePrice"),
+                            "volume": candle.get("volume"),
+                            "currency": candle.get("currency"),
+                            "adjusted_close": candle.get("closePrice") if self.adjusted else None,
+                        }
+                    )
             next_before = result.get("nextBefore")
             if reached_older or not next_before or next_before == before:
                 break
@@ -121,4 +143,8 @@ class KBMarketDataAdapter:
             endpoint = "/" + endpoint
         query = urlencode(params or {})
         url = self.base_url + endpoint + (("?" + query) if query else "")
-        return _json_request(url, headers={"Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json"}, timeout=self.timeout)
+        return _json_request(
+            url,
+            headers={"Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json"},
+            timeout=self.timeout,
+        )
