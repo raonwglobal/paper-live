@@ -11,6 +11,7 @@ from .execution import (
     PaperOrderRequest,
     VirtualMatchingEngine,
 )
+from .internal_api import InternalApiApp, create_internal_server, serve_internal_api
 from .orchestrator import StateGraph, build_analysis_graph
 from .reflection import EpisodicMemory, SelfReflectionWorker, TradeEpisode
 from .trade_facade import InternalTradeFacade, OrderIntent, OrderPreview, RiskAssessment
@@ -46,4 +47,7 @@ __all__ = [
     "OrderIntent",
     "OrderPreview",
     "RiskAssessment",
+    "InternalApiApp",
+    "create_internal_server",
+    "serve_internal_api",
 ]
