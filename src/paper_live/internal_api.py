@@ -168,6 +168,24 @@ class InternalApiApp:
             return _serialize_fill(result)
         return _serialize_order_result(result)
 
+    def cancel(self, body: dict[str, Any]) -> dict[str, Any]:
+        broker = str(body.get("broker", "toss")).strip().lower() or "toss"
+        order_id = str(body.get("order_id") or body.get("orderId") or "").strip()
+        if not order_id:
+            raise InternalApiError(400, "MISSING_ORDER_ID", "order_id is required")
+        approval_id = body.get("approval_id") or body.get("approvalId")
+        try:
+            ok = self.facade.cancel(
+                broker=broker,
+                order_id=order_id,
+                approval_id=str(approval_id) if approval_id else None,
+            )
+        except PermissionError as exc:
+            raise InternalApiError(403, "CANCEL_DENIED", str(exc)) from exc
+        except ValueError as exc:
+            raise InternalApiError(400, "CANCEL_REJECTED", str(exc)) from exc
+        return {"kind": "cancel_result", "broker": broker, "order_id": order_id, "cancelled": bool(ok)}
+
 
 def make_handler(app: InternalApiApp) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
@@ -224,6 +242,9 @@ def make_handler(app: InternalApiApp) -> type[BaseHTTPRequestHandler]:
                     return
                 if path == "/internal/trade/submit":
                     self._write_json(200, app.submit(body))
+                    return
+                if path == "/internal/trade/cancel":
+                    self._write_json(200, app.cancel(body))
                     return
                 raise InternalApiError(404, "NOT_FOUND", f"unknown path: {path}")
             except InternalApiError as err:
