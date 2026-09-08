@@ -58,6 +58,7 @@ src/paper_live/
 | GET | `/internal/health` | `X-Internal-Token` |
 | POST | `/internal/trade/preview` | `X-Internal-Token` |
 | POST | `/internal/trade/submit` | `X-Internal-Token` |
+| POST | `/internal/trade/cancel` | `X-Internal-Token` |
 
 `create_internal_server` / `serve_internal_api` 로 기동합니다. 응답에 API 키·토큰은 포함되지 않습니다. 상세는 [README.md](README.md) 참고.
 
