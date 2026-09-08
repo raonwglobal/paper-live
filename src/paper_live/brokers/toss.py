@@ -29,8 +29,25 @@ class TossBrokerAdapter(BrokerAdapter):
 
     def __init__(self, credentials: TossCredentials | None = None, timeout: float = 10.0):
         self.credentials = credentials
+        self._base_credentials = credentials
         self.timeout = timeout
         self._token: str | None = None
+        self._ephemeral = False
+
+    def apply_secret_material(self, material: str) -> None:
+        """Inject host-resolved credentials for the next live calls; not for agents."""
+        from .credentials import parse_toss_credentials
+
+        self.credentials = parse_toss_credentials(material)
+        self._token = None
+        self._ephemeral = True
+
+    def clear_secret_material(self) -> None:
+        """Drop ephemeral credentials after a gated submit/cancel."""
+        if self._ephemeral:
+            self.credentials = self._base_credentials
+            self._token = None
+            self._ephemeral = False
 
     @classmethod
     def from_env(cls) -> TossBrokerAdapter:
@@ -100,12 +117,14 @@ class TossBrokerAdapter(BrokerAdapter):
             request = BrokerOrderRequest(
                 str(request_or_symbol), side, quantity, "limit" if price is not None else "market"
             )
-        if request.side not in {"BUY", "SELL"} or request.order_type.upper() not in {"LIMIT", "MARKET"}:
+        side = request.side.upper()
+        order_type = request.order_type.upper()
+        if side not in {"BUY", "SELL"} or order_type not in {"LIMIT", "MARKET"}:
             raise ValueError("unsupported Toss order request")
         payload = {
             "symbol": request.symbol,
-            "side": request.side,
-            "orderType": request.order_type.upper(),
+            "side": side,
+            "orderType": order_type,
             "quantity": str(request.quantity),
         }
         if price is not None:

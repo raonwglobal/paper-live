@@ -24,10 +24,25 @@ class KbCredentials:
 class KbBrokerAdapter(BrokerAdapter):
     name = "kb"
 
-    def __init__(self, credentials: KbCredentials, timeout: float = 10.0):
+    def __init__(self, credentials: KbCredentials | None = None, timeout: float = 10.0):
         self.credentials = credentials
+        self._base_credentials = credentials
         self.timeout = timeout
         self._token: str | None = None
+        self._ephemeral = False
+
+    def apply_secret_material(self, material: str) -> None:
+        from .credentials import parse_kb_credentials
+
+        self.credentials = parse_kb_credentials(material)
+        self._token = None
+        self._ephemeral = True
+
+    def clear_secret_material(self) -> None:
+        if self._ephemeral:
+            self.credentials = self._base_credentials
+            self._token = None
+            self._ephemeral = False
 
     @classmethod
     def from_env(cls) -> KbBrokerAdapter:
@@ -37,14 +52,20 @@ class KbBrokerAdapter(BrokerAdapter):
             )
         )
 
+    def _require_credentials(self) -> KbCredentials:
+        if self.credentials is None:
+            raise PermissionError("KB credentials are not configured")
+        return self.credentials
+
     def _token_value(self) -> str:
         if self._token:
             return self._token
+        credentials = self._require_credentials()
         payload = json.dumps(
             {
                 "grant_type": "client_credentials",
-                "appKey": self.credentials.app_key,
-                "appSecret": self.credentials.app_secret,
+                "appKey": credentials.app_key,
+                "appSecret": credentials.app_secret,
             }
         ).encode()
         req = urllib.request.Request(
