@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import asdict
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from .data_lake import DatasetManifest, GoogleDriveStorageAgent
 from .recommendation import StockRecommendationAgent
@@ -24,7 +24,5 @@ class RecommendationPipeline:
         for row in ranked:
             row["decision_time"] = data_as_of
             row["dataset_version"] = "recommendation-v1"
-        manifest = self.storage.write_jsonl(
-            dataset, ranked, as_of=data_as_of, schema_version="recommendation-v1"
-        )
+        manifest = self.storage.write_jsonl(dataset, ranked, as_of=data_as_of, schema_version="recommendation-v1")
         return ranked, manifest
