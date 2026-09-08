@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import urllib.parse
+import urllib.request
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -25,6 +28,64 @@ class DriveClient(Protocol):
         self, name: str, content: bytes, *, folder_id: str | None = None, mime_type: str = "application/octet-stream"
     ) -> str: ...
 
+
+
+
+class GoogleDriveApiClient:
+    """Minimal Google Drive v3 client for idempotent dataset artifacts."""
+
+    def __init__(self, *, access_token: str | None = None, shared_drive_id: str | None = None, timeout: int = 30):
+        self.access_token = access_token or os.getenv("GOOGLE_DRIVE_DATA_ACCESS_TOKEN") or os.getenv("GOOGLE_DRIVE_ACCESS_TOKEN")
+        self.shared_drive_id = shared_drive_id or os.getenv("GOOGLE_DRIVE_DATA_SHARED_DRIVE_ID")
+        self.timeout = timeout
+        if not self.access_token:
+            raise RuntimeError("Google Drive access token is required")
+
+    def _request(self, method: str, url: str, data: bytes | None = None, content_type: str = "application/json") -> bytes:
+        req = urllib.request.Request(url, data=data, method=method, headers={
+            "Authorization": f"Bearer {self.access_token}", "Content-Type": content_type
+        })
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as response:
+                return response.read()
+        except Exception as exc:
+            raise RuntimeError(f"Google Drive request failed: {type(exc).__name__}") from exc
+
+    def _common_params(self) -> str:
+        params = "supportsAllDrives=true"
+        if self.shared_drive_id:
+            params += "&includeItemsFromAllDrives=true&corpora=drive&driveId=" + urllib.parse.quote(self.shared_drive_id)
+        return params
+
+    def _find(self, name: str, folder_id: str | None) -> str | None:
+        escaped = name.replace("'", "''")
+        clauses = [f"name='{escaped}'", "trashed=false"]
+        if folder_id:
+            clauses.append(f"'{folder_id}' in parents")
+        query = urllib.parse.quote(" and ".join(clauses))
+        url = f"https://www.googleapis.com/drive/v3/files?q={query}&fields=files(id,name)&pageSize=10&{self._common_params()}"
+        payload = json.loads(self._request("GET", url))
+        files = payload.get("files", [])
+        return files[0]["id"] if files else None
+
+    def upload(self, name: str, content: bytes, *, folder_id: str | None = None, mime_type: str = "application/octet-stream") -> str:
+        existing = self._find(name, folder_id)
+        if existing:
+            url = f"https://www.googleapis.com/upload/drive/v3/files/{urllib.parse.quote(existing, safe='')}?uploadType=media&{self._common_params()}"
+            self._request("PATCH", url, content, mime_type)
+            return existing
+        metadata = {"name": name}
+        if folder_id:
+            metadata["parents"] = [folder_id]
+        boundary = "paper-live-" + hashlib.sha256(content).hexdigest()[:16]
+        body = (
+            f"--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n".encode()
+            + json.dumps(metadata).encode()
+            + f"\r\n--{boundary}\r\nContent-Type: {mime_type}\r\n\r\n".encode()
+            + content + f"\r\n--{boundary}--\r\n".encode()
+        )
+        url = f"https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id&{self._common_params()}"
+        return json.loads(self._request("POST", url, body, f"multipart/related; boundary={boundary}"))["id"]
 
 class LocalDriveMirror:
     """Filesystem mirror used for tests and offline operation."""
