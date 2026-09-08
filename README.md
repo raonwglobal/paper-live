@@ -2,7 +2,7 @@
 
 Agent & skill based **paper / virtual / live-capable quant execution runtime**.
 
-paper-live is an optional high-capability **execution backend**: environment isolation, risk, approval, virtual matching, broker routing, and encrypted secret storage. It is not an external MCP gateway — callers (CLI, agents, or an external gateway) use the in-process `InternalTradeFacade` (HTTP internal API may be added later).
+paper-live is an optional high-capability **execution backend**: environment isolation, risk, approval, virtual matching, broker routing, and encrypted secret storage. It is not an external MCP gateway — callers (CLI, agents, or an external gateway) use the in-process `InternalTradeFacade` or the stdlib **internal HTTP API**.
 
 ## Features
 
@@ -14,6 +14,7 @@ paper-live is an optional high-capability **execution backend**: environment iso
 | Risk | `risk.py` | `RiskGuardian`, circuit breaker, notional / position / daily loss |
 | Approvals | `live_approval` + `security.live_approval_gate` | Env promotion vs per-order TTL/nonce |
 | Trade API | `trade_facade.py` | `OrderIntent` → `preview` → `submit` |
+| Internal HTTP | `internal_api.py` | `/internal/health`, `/internal/trade/preview|submit` |
 | Secrets | `secrets/` | `SecretBroker` + `GoogleDriveSecretStore` (AES-GCM) / `InMemorySecretStore` |
 | Market archive | `data_lake.py` | Versioned JSONL + manifest on Google Drive |
 | Plugins / agents | `plugins/`, `agents.py` | Skill allow-list by environment |
@@ -103,6 +104,7 @@ Datasets are written as versioned JSONL + `manifest.json` (checksum, row_count).
 ```text
 src/paper_live/
   trade_facade.py     # OrderIntent / OrderPreview / InternalTradeFacade
+  internal_api.py     # stdlib HTTP /internal/*
   environment.py
   execution.py
   risk.py
@@ -120,6 +122,43 @@ pytest -vv --tb=short
 # with coverage (CI):
 pytest -vv --cov=paper_live --cov-report=term-missing
 ```
+
+## Internal HTTP API (P1)
+
+Stdlib-only loopback server for process-boundary callers (e.g. an external gateway).
+
+| Method | Path | Auth header |
+|--------|------|-------------|
+| GET | `/internal/health` | `X-Internal-Token` |
+| POST | `/internal/trade/preview` | `X-Internal-Token` |
+| POST | `/internal/trade/submit` | `X-Internal-Token` |
+
+```python
+from paper_live import create_internal_server, serve_internal_api
+
+# ephemeral port for tests
+server = create_internal_server(facade, internal_token="shared-secret", host="127.0.0.1", port=0)
+port = server.server_address[1]
+
+# or background daemon on fixed port
+serve_internal_api(facade, internal_token="shared-secret", host="127.0.0.1", port=8787)
+```
+
+Preview body example:
+
+```json
+{
+  "symbol": "005930",
+  "side": "BUY",
+  "quantity": "10",
+  "order_type": "MARKET",
+  "reference_price": "70000",
+  "broker": "toss"
+}
+```
+
+Submit (paper): same fields plus optional `client_order_id`.  
+Submit (REAL_LIVE): also requires `approval_id`. Responses never include API keys or tokens.
 
 ## License
 
