@@ -9,7 +9,7 @@ import tempfile
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -35,7 +35,9 @@ class GoogleDriveSecretStore:
 
     FILE_NAME = "paper-live-encrypted-secrets.db"
 
-    def __init__(self, *, access_token: str | None = None, encryption_key: bytes | None = None, file_id: str | None = None):
+    def __init__(
+        self, *, access_token: str | None = None, encryption_key: bytes | None = None, file_id: str | None = None
+    ):
         self.access_token = access_token or os.getenv("GOOGLE_DRIVE_ACCESS_TOKEN")
         raw_key = encryption_key or self._key_from_env()
         if not self.access_token:
@@ -58,8 +60,15 @@ class GoogleDriveSecretStore:
             pass
         return value.encode()
 
-    def _request(self, method: str, url: str, data: bytes | None = None, content_type: str = "application/json") -> bytes:
-        req = urllib.request.Request(url, data=data, method=method, headers={"Authorization": f"Bearer {self.access_token}", "Content-Type": content_type})
+    def _request(
+        self, method: str, url: str, data: bytes | None = None, content_type: str = "application/json"
+    ) -> bytes:
+        req = urllib.request.Request(
+            url,
+            data=data,
+            method=method,
+            headers={"Authorization": f"Bearer {self.access_token}", "Content-Type": content_type},
+        )
         try:
             with urllib.request.urlopen(req, timeout=15) as response:
                 return response.read()
@@ -71,10 +80,24 @@ class GoogleDriveSecretStore:
             path = Path(directory) / "secrets.db"
             conn = sqlite3.connect(path)
             try:
-                conn.execute("CREATE TABLE secrets (secret_id TEXT PRIMARY KEY, provider TEXT NOT NULL, environment TEXT NOT NULL, value TEXT NOT NULL, scopes TEXT NOT NULL, expires_at TEXT, status TEXT NOT NULL, updated_at TEXT NOT NULL)")
-                now = datetime.now(timezone.utc).isoformat()
+                conn.execute(
+                    "CREATE TABLE secrets (secret_id TEXT PRIMARY KEY, provider TEXT NOT NULL, environment TEXT NOT NULL, value TEXT NOT NULL, scopes TEXT NOT NULL, expires_at TEXT, status TEXT NOT NULL, updated_at TEXT NOT NULL)"
+                )
+                now = datetime.now(UTC).isoformat()
                 for r in records:
-                    conn.execute("INSERT INTO secrets VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (r.secret_id, r.provider, r.environment, r.value, json.dumps(r.scopes), r.expires_at, r.status, now))
+                    conn.execute(
+                        "INSERT INTO secrets VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            r.secret_id,
+                            r.provider,
+                            r.environment,
+                            r.value,
+                            json.dumps(r.scopes),
+                            r.expires_at,
+                            r.status,
+                            now,
+                        ),
+                    )
                 conn.commit()
             finally:
                 conn.close()
@@ -92,7 +115,9 @@ class GoogleDriveSecretStore:
             path.write_bytes(plaintext)
             conn = sqlite3.connect(path)
             try:
-                rows = conn.execute("SELECT secret_id, provider, environment, value, scopes, expires_at, status FROM secrets").fetchall()
+                rows = conn.execute(
+                    "SELECT secret_id, provider, environment, value, scopes, expires_at, status FROM secrets"
+                ).fetchall()
             finally:
                 conn.close()
         return [SecretRecord(row[0], row[3], row[1], row[2], tuple(json.loads(row[4])), row[5], row[6]) for row in rows]
@@ -100,36 +125,62 @@ class GoogleDriveSecretStore:
     def _download(self) -> bytes | None:
         if not self.file_id:
             return None
-        return self._request("GET", f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(self.file_id, safe='') }?alt=media")
+        return self._request(
+            "GET", f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(self.file_id, safe='')}?alt=media"
+        )
 
     def _find_file_id(self) -> str | None:
         if self.file_id:
             return self.file_id
         query = urllib.parse.quote(f"name='{self.FILE_NAME}' and trashed=false")
-        payload = json.loads(self._request("GET", f"https://www.googleapis.com/drive/v3/files?q={query}&fields=files(id,name)"))
+        payload = json.loads(
+            self._request("GET", f"https://www.googleapis.com/drive/v3/files?q={query}&fields=files(id,name)")
+        )
         files = payload.get("files", [])
         return files[0]["id"] if files else None
 
     def _upload(self, blob: bytes) -> str:
         boundary = "paperlive-" + pysecrets.token_hex(12)
         folder_id = os.getenv("GOOGLE_DRIVE_SECRET_FOLDER_ID")
-        metadata = {"name": self.FILE_NAME}
+        metadata: dict[str, object] = {"name": self.FILE_NAME}
         if folder_id:
             metadata["parents"] = [folder_id]
         metadata_bytes = json.dumps(metadata).encode()
-        body = (f"--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n".encode() + metadata_bytes + f"\r\n--{boundary}\r\nContent-Type: application/octet-stream\r\n\r\n".encode() + blob + f"\r\n--{boundary}--\r\n".encode())
-        result = json.loads(self._request("POST", f"https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", body, f"multipart/related; boundary={boundary}"))
+        body = (
+            f"--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n".encode()
+            + metadata_bytes
+            + f"\r\n--{boundary}\r\nContent-Type: application/octet-stream\r\n\r\n".encode()
+            + blob
+            + f"\r\n--{boundary}--\r\n".encode()
+        )
+        result = json.loads(
+            self._request(
+                "POST",
+                "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
+                body,
+                f"multipart/related; boundary={boundary}",
+            )
+        )
         self.file_id = result["id"]
         return self.file_id
 
     def _update(self, file_id: str, blob: bytes) -> None:
-        self._request("PATCH", f"https://www.googleapis.com/upload/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?uploadType=media", blob, "application/octet-stream")
+        self._request(
+            "PATCH",
+            f"https://www.googleapis.com/upload/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?uploadType=media",
+            blob,
+            "application/octet-stream",
+        )
 
     def get(self, secret_id: str) -> str:
         file_id = self._find_file_id()
         if not file_id:
             raise KeyError(secret_id)
-        records = self._decrypt(self._request("GET", f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?alt=media"))
+        records = self._decrypt(
+            self._request(
+                "GET", f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?alt=media"
+            )
+        )
         for record in records:
             if record.secret_id != secret_id or record.status != "active":
                 continue
@@ -138,7 +189,7 @@ class GoogleDriveSecretStore:
                     expires = datetime.fromisoformat(record.expires_at.replace("Z", "+00:00"))
                 except ValueError as exc:
                     raise RuntimeError("invalid secret expiration metadata") from exc
-                if expires <= datetime.now(timezone.utc):
+                if expires <= datetime.now(UTC):
                     raise KeyError(secret_id)
             return record.value
         raise KeyError(secret_id)
@@ -147,7 +198,11 @@ class GoogleDriveSecretStore:
         file_id = self._find_file_id()
         records = []
         if file_id:
-            records = self._decrypt(self._request("GET", f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?alt=media"))
+            records = self._decrypt(
+                self._request(
+                    "GET", f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?alt=media"
+                )
+            )
         records = [r for r in records if r.secret_id != record.secret_id]
         records.append(record)
         blob = self._encrypt(records)
@@ -160,13 +215,19 @@ class GoogleDriveSecretStore:
         file_id = self._find_file_id()
         if not file_id:
             raise KeyError(secret_id)
-        records = self._decrypt(self._request("GET", f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?alt=media"))
+        records = self._decrypt(
+            self._request(
+                "GET", f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?alt=media"
+            )
+        )
         found = False
         updated = []
         for r in records:
             if r.secret_id == secret_id:
                 found = True
-                updated.append(SecretRecord(r.secret_id, r.value, r.provider, r.environment, r.scopes, r.expires_at, "revoked"))
+                updated.append(
+                    SecretRecord(r.secret_id, r.value, r.provider, r.environment, r.scopes, r.expires_at, "revoked")
+                )
             else:
                 updated.append(r)
         if not found:
