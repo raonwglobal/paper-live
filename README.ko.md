@@ -51,4 +51,14 @@ src/paper_live/
   environment.py execution.py risk.py brokers/ ...
 ```
 
+## 내부 HTTP API (P1)
+
+| Method | Path | 인증 |
+|--------|------|------|
+| GET | `/internal/health` | `X-Internal-Token` |
+| POST | `/internal/trade/preview` | `X-Internal-Token` |
+| POST | `/internal/trade/submit` | `X-Internal-Token` |
+
+`create_internal_server` / `serve_internal_api` 로 기동합니다. 응답에 API 키·토큰은 포함되지 않습니다. 상세는 [README.md](README.md) 참고.
+
 AI 에이전트는 리포지토리 작업 시 `AGENTS.md`를 먼저 읽으세요.
