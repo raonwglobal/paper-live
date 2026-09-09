@@ -14,7 +14,7 @@ paper-live is an optional high-capability **execution backend**: environment iso
 | Risk | `risk.py` | `RiskGuardian`, circuit breaker, notional / position / daily loss |
 | Approvals | `live_approval` + `security.live_approval_gate` | Env promotion vs per-order TTL/nonce |
 | Trade API | `trade_facade.py` | `OrderIntent` → `preview` → `submit` |
-| Internal HTTP | `internal_api.py` | `/internal/health`, `/internal/trade/preview|submit` |
+| Internal HTTP | `internal_api.py` | `/internal/health`, `/internal/trade/preview|submit|cancel` |
 | Secrets | `secrets/` | `SecretBroker` + `GoogleDriveSecretStore` (AES-GCM) / `InMemorySecretStore` |
 | Market archive | `data_lake.py` | Versioned JSONL + manifest on Google Drive |
 | Plugins / agents | `plugins/`, `agents.py` | Skill allow-list by environment |
@@ -132,6 +132,7 @@ Stdlib-only loopback server for process-boundary callers (e.g. an external gatew
 | GET | `/internal/health` | `X-Internal-Token` |
 | POST | `/internal/trade/preview` | `X-Internal-Token` |
 | POST | `/internal/trade/submit` | `X-Internal-Token` |
+| POST | `/internal/trade/cancel` | `X-Internal-Token` |
 
 ```python
 from paper_live import create_internal_server, serve_internal_api
@@ -157,8 +158,36 @@ Preview body example:
 }
 ```
 
-Submit (paper): same fields plus optional `client_order_id`.  
+Submit (paper): same fields plus optional `client_order_id`.
 Submit (REAL_LIVE): also requires `approval_id`. Responses never include API keys or tokens.
+
+### Live credential material (SecretBroker)
+
+Store values under `toss-order` / `kb-order` (or custom `broker_secret_ids`). Preferred JSON:
+
+```json
+{"client_id":"...","client_secret":"...","account_seq":"..."}
+```
+
+```json
+{"app_key":"...","app_secret":"...","order_path":"/api/v1/ssqm1802"}
+```
+
+Legacy colon form is also accepted (`client_id:client_secret:account_seq`). On REAL_LIVE submit/cancel the facade calls `apply_secret_material`, then `clear_secret_material` in `finally`.
+
+### Cancel
+
+```python
+facade.cancel(broker="toss", order_id="ord-1", approval_id=approval.approval_id)
+```
+
+HTTP:
+
+```http
+POST /internal/trade/cancel
+X-Internal-Token: ...
+{"broker":"toss","order_id":"ord-1","approval_id":"..."}
+```
 
 ## License
 
