@@ -30,7 +30,7 @@ class InternalApiError(Exception):
 def _json_default(value: Any) -> Any:
     if isinstance(value, Decimal):
         return str(value)
-    if is_dataclass(value):
+    if is_dataclass(value) and not isinstance(value, type):
         return asdict(value)
     if hasattr(value, "value"):
         return value.value
