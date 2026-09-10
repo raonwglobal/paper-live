@@ -1,5 +1,3 @@
-from datetime import date
-
 from paper_live.ingestion_retry import IngestionRetryService
 from paper_live.ingestion_run import FailureQueue, IngestionFailure
 
