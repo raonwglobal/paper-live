@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
-from typing import Callable
 
 from .ingestion_job import MarketIngestionJob
-from .ingestion_run import FailureQueue, IngestionFailure, IngestionRunLedger, IngestionRunManifest, build_manifest, utc_now
+from .ingestion_run import (
+    FailureQueue,
+    IngestionFailure,
+    IngestionRunLedger,
+    IngestionRunManifest,
+    build_manifest,
+    utc_now,
+)
 from .market_dataset import DailyPriceProvider
 from .market_ingestion import IngestionFailure as CollectorFailure
 from .universe import SecurityMaster
@@ -50,10 +57,9 @@ class IngestionPipeline:
         run_id = IngestionRunLedger.new_run_id(market=','.join(markets), start_date=start_date,
                                                end_date=end_date, symbols=symbols)
         manifest = build_manifest(run_id=run_id, started_at=started, market=','.join(markets),
-                                  start_date=start_date, end_date=end_date,
-                                  requested_symbols=len(set(symbols)), succeeded_symbols=report.symbols_ok,
-                                  rows_collected=report.records, failures=failures,
-                                  dataset=getattr(dataset, "dataset", None),
+                                  start_date=start_date, end_date=end_date, requested_symbols=len(set(symbols)),
+                                  succeeded_symbols=report.symbols_ok, rows_collected=report.records,
+                                  failures=failures, dataset=getattr(dataset, "dataset", None),
                                   dataset_checksum_sha256=getattr(dataset, "checksum_sha256", None),
                                   finished_at=report.completed_at)
         if self.ledger:
