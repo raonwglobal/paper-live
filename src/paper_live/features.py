@@ -26,13 +26,20 @@ class DailyFeatureEngine:
     def build(self, rows: Sequence[Mapping[str, Any]], *, decision_time: str) -> list[dict[str, Any]]:
         groups: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
         for row in rows:
-            if str(row.get("available_at", "")) <= decision_time:
+            available_raw = str(row.get("available_at", ""))
+            try:
+                available = datetime.fromisoformat(available_raw.replace("Z", "+00:00"))
+                decision = datetime.fromisoformat(decision_time.replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if available.tzinfo is None: available = available.replace(tzinfo=timezone.utc)
+            if decision.tzinfo is None: decision = decision.replace(tzinfo=timezone.utc)
+            if available <= decision:
                 groups[(str(row.get("market", "")), str(row.get("symbol", "")))].append(row)
         output = []
         for (_market, _symbol), items in groups.items():
             items = sorted(items, key=lambda x: str(x.get("trade_date", "")))
             closes = [float(x["close"]) for x in items]
-            vols = [float(x["volume"]) for x in items if x.get("volume") not in (None, "")]
             for i, row in enumerate(items):
                 price = closes[i]
                 prev = closes[i - 1] if i else None
@@ -52,7 +59,8 @@ class DailyFeatureEngine:
                     else None
                 )
                 volume = float(row["volume"]) if row.get("volume") not in (None, "") else None
-                recent = vols[max(0, len(vols) - self.config.volume_window) :]
+                recent_rows = items[max(0, i - self.config.volume_window + 1) : i + 1]
+                recent = [float(x["volume"]) for x in recent_rows if x.get("volume") not in (None, "")]
                 avg_vol = sum(recent) / len(recent) if recent else None
                 output.append(
                     {
