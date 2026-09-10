@@ -2,20 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
-from typing import Any, Iterable, Protocol
+from typing import Protocol
 
 
 class ArtifactWriter(Protocol):
-    def upload(
-        self,
-        name: str,
-        content: bytes,
-        *,
-        folder_id: str | None = None,
-        mime_type: str = "application/octet-stream",
-    ) -> str: ...
+    def upload(self, name: str, content: bytes, *, folder_id: str | None = None,
+               mime_type: str = "application/octet-stream") -> str: ...
 
 
 @dataclass(frozen=True)
@@ -72,19 +67,15 @@ class FailureQueue:
             self.add(failure)
 
     def retryable(self) -> list[IngestionFailure]:
-        return sorted(
-            (item for item in self._items.values() if item.retryable),
-            key=lambda item: (item.market, item.symbol, item.start_date, item.end_date),
-        )
+        return sorted((item for item in self._items.values() if item.retryable),
+                      key=lambda item: (item.market, item.symbol, item.start_date, item.end_date))
 
     def all(self) -> list[IngestionFailure]:
         return sorted(self._items.values(), key=lambda item: (item.market, item.symbol, item.start_date, item.end_date))
 
     def to_jsonl(self) -> bytes:
-        return b"".join(
-            json.dumps(asdict(item), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
-            for item in self.all()
-        )
+        return b"".join(json.dumps(asdict(item), ensure_ascii=False, sort_keys=True,
+                                   separators=(",", ":")).encode("utf-8") + b"\n" for item in self.all())
 
 
 class IngestionRunLedger:
@@ -96,36 +87,19 @@ class IngestionRunLedger:
 
     @staticmethod
     def new_run_id(*, market: str, start_date: date, end_date: date, symbols: Iterable[str]) -> str:
-        canonical = json.dumps(
-            {
-                "market": market,
-                "start_date": start_date.isoformat(),
-                "end_date": end_date.isoformat(),
-                "symbols": sorted(set(symbols)),
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode()
+        canonical = json.dumps({"market": market, "start_date": start_date.isoformat(),
+                                "end_date": end_date.isoformat(), "symbols": sorted(set(symbols))},
+                               sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(canonical).hexdigest()[:24]
 
-    def write(
-        self,
-        manifest: IngestionRunManifest,
-        failures: FailureQueue,
-    ) -> tuple[str, str]:
+    def write(self, manifest: IngestionRunManifest, failures: FailureQueue) -> tuple[str, str]:
         prefix = f"runs/{manifest.market}/{manifest.run_id}"
-        manifest_id = self.writer.upload(
-            f"{prefix}/manifest.json",
-            json.dumps(asdict(manifest), ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8"),
-            folder_id=self.folder_id,
-            mime_type="application/json",
-        )
-        failure_id = self.writer.upload(
-            f"{prefix}/failures.jsonl",
-            failures.to_jsonl(),
-            folder_id=self.folder_id,
-            mime_type="application/x-ndjson",
-        )
+        manifest_id = self.writer.upload(f"{prefix}/manifest.json",
+                                         json.dumps(asdict(manifest), ensure_ascii=False, sort_keys=True,
+                                                    indent=2).encode("utf-8"), folder_id=self.folder_id,
+                                         mime_type="application/json")
+        failure_id = self.writer.upload(f"{prefix}/failures.jsonl", failures.to_jsonl(),
+                                        folder_id=self.folder_id, mime_type="application/x-ndjson")
         return manifest_id, failure_id
 
 
@@ -133,40 +107,19 @@ def utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def build_manifest(
-    *,
-    run_id: str,
-    started_at: str,
-    market: str,
-    start_date: date,
-    end_date: date,
-    requested_symbols: int,
-    succeeded_symbols: int,
-    rows_collected: int,
-    failures: FailureQueue,
-    dataset: str | None = None,
-    dataset_checksum_sha256: str | None = None,
-    finished_at: str | None = None,
-) -> IngestionRunManifest:
+def build_manifest(*, run_id: str, started_at: str, market: str, start_date: date, end_date: date,
+                   requested_symbols: int, succeeded_symbols: int, rows_collected: int,
+                   failures: FailureQueue, dataset: str | None = None,
+                   dataset_checksum_sha256: str | None = None, finished_at: str | None = None) -> IngestionRunManifest:
     all_failures = failures.all()
     retryable = sum(item.retryable for item in all_failures)
     status = "completed" if not all_failures else "completed_with_failures"
     if succeeded_symbols == 0 and requested_symbols > 0:
         status = "failed"
-    return IngestionRunManifest(
-        run_id=run_id,
-        started_at=started_at,
-        finished_at=finished_at or utc_now(),
-        status=status,
-        market=market,
-        start_date=start_date.isoformat(),
-        end_date=end_date.isoformat(),
-        requested_symbols=requested_symbols,
-        succeeded_symbols=succeeded_symbols,
-        failed_symbols=len(all_failures),
-        rows_collected=rows_collected,
-        retryable_failures=retryable,
-        non_retryable_failures=len(all_failures) - retryable,
-        dataset=dataset,
-        dataset_checksum_sha256=dataset_checksum_sha256,
-    )
+    return IngestionRunManifest(run_id=run_id, started_at=started_at, finished_at=finished_at or utc_now(),
+                                status=status, market=market, start_date=start_date.isoformat(),
+                                end_date=end_date.isoformat(), requested_symbols=requested_symbols,
+                                succeeded_symbols=succeeded_symbols, failed_symbols=len(all_failures),
+                                rows_collected=rows_collected, retryable_failures=retryable,
+                                non_retryable_failures=len(all_failures) - retryable, dataset=dataset,
+                                dataset_checksum_sha256=dataset_checksum_sha256)
