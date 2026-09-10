@@ -17,7 +17,7 @@ class MarketIngestionJobReport:
     records: int
     symbols_ok: int
     failures: int
-    failure_details: tuple[object, ...] = ()
+    failure_details: tuple[tuple[str, object], ...] = ()
     dataset_manifest: object | None = None
 
 
@@ -43,7 +43,7 @@ class MarketIngestionJob:
         started = datetime.now(UTC)
         available = available_at or started.isoformat()
         total_ok = total_failures = 0
-        details: list[object] = []
+        details: list[tuple[str, object]] = []
         rows = []
         markets = sorted({s.market for s in self.universe.active()})
         for market in markets:
@@ -61,9 +61,9 @@ class MarketIngestionJob:
                 rows.extend(report.rows)
                 total_ok += report.symbols_ok
                 total_failures += len(report.failures)
-                details.extend(report.failures)
+                details.extend((market, failure) for failure in report.failures)
         dataset_manifest = self.builder.build(rows, as_of=available) if rows else None
         return MarketIngestionJobReport(
-            started.isoformat(), datetime.now(UTC).isoformat(), tuple(markets),
-            len(rows), total_ok, total_failures, tuple(details), dataset_manifest,
+            started.isoformat(), datetime.now(UTC).isoformat(), tuple(markets), len(rows),
+            total_ok, total_failures, tuple(details), dataset_manifest,
         )
