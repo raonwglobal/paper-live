@@ -59,14 +59,14 @@ class PluginInstaller:
             dest = Path(td) / "repo"
             try:
                 subprocess.run(
-                    ["git", "clone", "--no-checkout", "--depth", "1", source.url, str(dest)],
+                    ["git", "clone", "--no-checkout", source.url, str(dest)],
                     check=True,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
                     text=True,
                 )
                 subprocess.run(
-                    ["git", "-C", str(dest), "fetch", "--depth", "1", "origin", commit],
+                    ["git", "-C", str(dest), "fetch", "--no-tags", "origin", commit],
                     check=True,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
