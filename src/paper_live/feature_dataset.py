@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 import hashlib
 import json
-from typing import Iterable, Mapping, Any
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from .recommendation import StockRecommendationAgent
 
