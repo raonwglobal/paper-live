@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from math import isfinite
 from typing import Any
+from datetime import datetime, timezone
 
 
 @dataclass(frozen=True)
@@ -55,8 +56,18 @@ class StockRecommendationAgent:
     def score(self, row: Mapping[str, Any], *, data_as_of: str | None = None) -> Recommendation | None:
         as_of = data_as_of or str(row.get("data_as_of", ""))
         available = str(row.get("available_at", ""))
-        if as_of and available and available > as_of:
-            return None  # explicit look-ahead-bias guard
+        if as_of and available:
+            try:
+                decision = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
+                available_dt = datetime.fromisoformat(available.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+            if decision.tzinfo is None:
+                decision = decision.replace(tzinfo=timezone.utc)
+            if available_dt.tzinfo is None:
+                available_dt = available_dt.replace(tzinfo=timezone.utc)
+            if available_dt > decision:
+                return None  # explicit look-ahead-bias guard
         symbol = str(row.get("symbol", "")).strip()
         if not symbol:
             return None
