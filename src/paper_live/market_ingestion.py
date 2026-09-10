@@ -21,6 +21,7 @@ class IngestionReport:
     symbols_ok: int
     failures: tuple[IngestionFailure, ...]
     manifest: object | None
+    rows: tuple[DailyPriceRecord, ...] = ()
 
 
 class RateLimiter:
@@ -36,29 +37,18 @@ class RateLimiter:
 
 
 class ResilientDailyCollector:
-    def __init__(
-        self,
-        provider: DailyPriceProvider,
-        builder: DailyDatasetBuilder,
-        *,
-        requests_per_second: float = 2.0,
-        max_retries: int = 3,
-        backoff_seconds: float = 1.0,
-        sleeper: Callable[[float], None] = sleep,
-    ):
+    def __init__(self, provider: DailyPriceProvider, builder: DailyDatasetBuilder, *,
+                 requests_per_second: float = 2.0, max_retries: int = 3,
+                 backoff_seconds: float = 1.0, sleeper: Callable[[float], None] = sleep):
         if max_retries < 1:
             raise ValueError("max_retries must be >= 1")
         self.provider, self.builder = provider, builder
         self.limiter, self.max_retries, self.backoff_seconds, self.sleeper = (
-            RateLimiter(requests_per_second, sleeper),
-            max_retries,
-            backoff_seconds,
-            sleeper,
+            RateLimiter(requests_per_second, sleeper), max_retries, backoff_seconds, sleeper
         )
 
-    def collect(
-        self, symbols: Sequence[str], *, start_date: date, end_date: date, market: str, source: str, available_at: str
-    ) -> IngestionReport:
+    def collect(self, symbols: Sequence[str], *, start_date: date, end_date: date,
+                market: str, source: str, available_at: str, persist: bool = True) -> IngestionReport:
         rows: list[DailyPriceRecord] = []
         failures: list[IngestionFailure] = []
         ok = 0
@@ -68,12 +58,12 @@ class ResilientDailyCollector:
                 try:
                     self.limiter.wait()
                     payload = self.provider.fetch_daily_prices(symbol, start_date, end_date)
-                    rows.extend(
-                        DailyPriceNormalizer.normalize(
-                            item, symbol=symbol, market=market, source=source, available_at=available_at
-                        )
+                    normalized = tuple(
+                        DailyPriceNormalizer.normalize(item, symbol=symbol, market=market,
+                                                        source=source, available_at=available_at)
                         for item in payload
                     )
+                    rows.extend(normalized)
                     ok += 1
                     break
                 except Exception as exc:
@@ -82,5 +72,5 @@ class ResilientDailyCollector:
                         self.sleeper(self.backoff_seconds * (2 ** (attempt - 1)))
             else:
                 failures.append(IngestionFailure(symbol, last_error, self.max_retries))
-        manifest = self.builder.build(rows, as_of=available_at) if rows else None
-        return IngestionReport(len(rows), ok, tuple(failures), manifest)
+        manifest = self.builder.build(rows, as_of=available_at) if rows and persist else None
+        return IngestionReport(len(rows), ok, tuple(failures), manifest, tuple(rows))
