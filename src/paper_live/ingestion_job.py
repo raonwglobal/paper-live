@@ -18,23 +18,16 @@ class MarketIngestionJobReport:
     symbols_ok: int
     failures: int
     failure_details: tuple[object, ...] = ()
+    dataset_manifest: object | None = None
 
 
 class MarketIngestionJob:
-    """Runs deterministic universe batches through the resilient daily collector."""
+    """Runs deterministic universe batches and publishes one canonical dataset."""
 
-    def __init__(
-        self,
-        universe: SecurityMaster,
-        provider_factory: Callable[[str], DailyPriceProvider],
-        builder: DailyDatasetBuilder,
-        *,
-        batch_size: int = 200,
-        requests_per_second: float = 2.0,
-        max_retries: int = 3,
-        backoff_seconds: float = 1.0,
-        sleeper=None,
-    ):
+    def __init__(self, universe: SecurityMaster, provider_factory: Callable[[str], DailyPriceProvider],
+                 builder: DailyDatasetBuilder, *, batch_size: int = 200,
+                 requests_per_second: float = 2.0, max_retries: int = 3,
+                 backoff_seconds: float = 1.0, sleeper=None):
         if batch_size < 1:
             raise ValueError("batch_size must be positive")
         self.universe = universe
@@ -49,8 +42,9 @@ class MarketIngestionJob:
     def run(self, *, start_date: date, end_date: date, available_at: str | None = None) -> MarketIngestionJobReport:
         started = datetime.now(UTC)
         available = available_at or started.isoformat()
-        total_records = total_ok = total_failures = 0
+        total_ok = total_failures = 0
         details: list[object] = []
+        rows = []
         markets = sorted({s.market for s in self.universe.active()})
         for market in markets:
             provider = self.provider_factory(market)
@@ -62,13 +56,14 @@ class MarketIngestionJob:
             for batch in self.universe.batch(self.batch_size, market):
                 report: IngestionReport = collector.collect(
                     [s.symbol for s in batch], start_date=start_date, end_date=end_date,
-                    market=market, source=type(provider).__name__, available_at=available,
+                    market=market, source=type(provider).__name__, available_at=available, persist=False,
                 )
-                total_records += report.records
+                rows.extend(report.rows)
                 total_ok += report.symbols_ok
                 total_failures += len(report.failures)
                 details.extend(report.failures)
+        dataset_manifest = self.builder.build(rows, as_of=available) if rows else None
         return MarketIngestionJobReport(
             started.isoformat(), datetime.now(UTC).isoformat(), tuple(markets),
-            total_records, total_ok, total_failures, tuple(details),
+            len(rows), total_ok, total_failures, tuple(details), dataset_manifest,
         )
