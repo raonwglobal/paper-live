@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from typing import Callable
 
 from .market_dataset import DailyDatasetBuilder, DailyPriceProvider, DailyPriceRecord
-from .market_ingestion import IngestionFailure as CollectorFailure, IngestionReport, ResilientDailyCollector
+from .market_ingestion import IngestionFailure as CollectorFailure
+from .market_ingestion import IngestionReport, ResilientDailyCollector
 from .universe import SecurityMaster
 
 
