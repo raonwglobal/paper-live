@@ -3,9 +3,9 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from math import log
 from typing import Any
-from datetime import datetime, timezone
 
 
 @dataclass(frozen=True)
@@ -32,8 +32,10 @@ class DailyFeatureEngine:
                 decision = datetime.fromisoformat(decision_time.replace("Z", "+00:00"))
             except ValueError:
                 continue
-            if available.tzinfo is None: available = available.replace(tzinfo=timezone.utc)
-            if decision.tzinfo is None: decision = decision.replace(tzinfo=timezone.utc)
+            if available.tzinfo is None:
+                available = available.replace(tzinfo=UTC)
+            if decision.tzinfo is None:
+                decision = decision.replace(tzinfo=UTC)
             if available <= decision:
                 groups[(str(row.get("market", "")), str(row.get("symbol", "")))].append(row)
         output = []
@@ -62,15 +64,13 @@ class DailyFeatureEngine:
                 recent_rows = items[max(0, i - self.config.volume_window + 1) : i + 1]
                 recent = [float(x["volume"]) for x in recent_rows if x.get("volume") not in (None, "")]
                 avg_vol = sum(recent) / len(recent) if recent else None
-                output.append(
-                    {
-                        **row,
-                        "return_1d": None if prev is None or prev == 0 else price / prev - 1,
-                        "momentum": momentum,
-                        "volatility": volatility,
-                        "volume_ratio": None if not volume or not avg_vol else volume / avg_vol,
-                        "feature_decision_time": decision_time,
-                        "feature_version": "daily-features-v1",
-                    }
-                )
+                output.append({
+                    **row,
+                    "return_1d": None if prev is None or prev == 0 else price / prev - 1,
+                    "momentum": momentum,
+                    "volatility": volatility,
+                    "volume_ratio": None if not volume or not avg_vol else volume / avg_vol,
+                    "feature_decision_time": decision_time,
+                    "feature_version": "daily-features-v1",
+                })
         return output
