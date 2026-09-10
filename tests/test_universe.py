@@ -14,6 +14,6 @@ def test_universe_is_deterministic_and_batches():
 def test_duplicate_universe_rejected():
     try:
         SecurityMaster([Security("1", "A", "KRX"), Security("1", "A2", "KRX")])
-        assert False
     except ValueError:
-        assert True
+        return
+    raise AssertionError("duplicate universe should be rejected")
