@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
-from typing import Callable
 
 from .ingestion_run import FailureQueue, IngestionFailure
 from .market_dataset import DailyDatasetBuilder, DailyPriceProvider
@@ -18,10 +18,7 @@ class RetryReport:
 
 
 class IngestionRetryService:
-    """Deterministically retries only retryable ingestion failures.
-
-    Retry execution is data-only and never creates broker orders.
-    """
+    """Deterministically retries only retryable ingestion failures."""
 
     def __init__(self, provider_factory: Callable[[str], DailyPriceProvider], builder: DailyDatasetBuilder,
                  *, requests_per_second: float = 2.0, backoff_seconds: float = 1.0, sleeper=None) -> None:
@@ -53,11 +50,9 @@ class IngestionRetryService:
                 continue
             observed = report.failures[0] if report.failures else None
             remaining.add(IngestionFailure(
-                market=failure.market, symbol=failure.symbol,
-                start_date=failure.start_date, end_date=failure.end_date,
-                error_type=type(observed).__name__ if observed else failure.error_type,
+                market=failure.market, symbol=failure.symbol, start_date=failure.start_date,
+                end_date=failure.end_date, error_type=type(observed).__name__ if observed else failure.error_type,
                 error_message=observed.error if observed else failure.error_message,
-                attempts=failure.attempts + 1,
-                retryable=True,
+                attempts=failure.attempts + 1, retryable=True,
             ))
         return RetryReport(attempted, resolved, len(remaining.all()), remaining)
