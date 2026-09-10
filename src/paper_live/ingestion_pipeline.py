@@ -42,21 +42,18 @@ class IngestionPipeline:
             IngestionFailure(market=market, symbol=failure.symbol, start_date=start_date.isoformat(),
                              end_date=end_date.isoformat(), error_type=type(failure).__name__,
                              error_message=failure.error, attempts=failure.attempts, retryable=True)
-            for market, security_group in ((m, [s for s in securities if s.market == m]) for m in markets)
-            for failure in report.failure_details
-            if failure.symbol in {s.symbol for s in security_group}
+            for market, failure in report.failure_details
         )
         dataset = report.dataset_manifest
         run_id = IngestionRunLedger.new_run_id(market=','.join(markets), start_date=start_date,
                                                end_date=end_date, symbols=symbols)
-        manifest = build_manifest(
-            run_id=run_id, started_at=started, market=','.join(markets), start_date=start_date,
-            end_date=end_date, requested_symbols=len(set(symbols)), succeeded_symbols=report.symbols_ok,
-            rows_collected=report.records, failures=failures,
-            dataset=getattr(dataset, "dataset", None),
-            dataset_checksum_sha256=getattr(dataset, "checksum_sha256", None),
-            finished_at=report.completed_at,
-        )
+        manifest = build_manifest(run_id=run_id, started_at=started, market=','.join(markets),
+                                  start_date=start_date, end_date=end_date,
+                                  requested_symbols=len(set(symbols)), succeeded_symbols=report.symbols_ok,
+                                  rows_collected=report.records, failures=failures,
+                                  dataset=getattr(dataset, "dataset", None),
+                                  dataset_checksum_sha256=getattr(dataset, "checksum_sha256", None),
+                                  finished_at=report.completed_at)
         if self.ledger:
             manifest_id, failure_id = self.ledger.write(manifest, failures)
             return IngestionPipelineResult(manifest, failures, manifest_id, failure_id, dataset)
