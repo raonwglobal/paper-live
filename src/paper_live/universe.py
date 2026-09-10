@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 
 @dataclass(frozen=True)
@@ -42,4 +42,4 @@ class SecurityMaster:
         if size < 1:
             raise ValueError("size must be positive")
         values = self.active(market)
-        return tuple(tuple(values[i:i + size]) for i in range(0, len(values), size))
+        return tuple(tuple(values[i : i + size]) for i in range(0, len(values), size))
