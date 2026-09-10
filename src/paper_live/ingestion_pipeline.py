@@ -7,6 +7,7 @@ from typing import Callable
 from .ingestion_job import MarketIngestionJob
 from .ingestion_run import FailureQueue, IngestionFailure, IngestionRunLedger, IngestionRunManifest, build_manifest, utc_now
 from .market_dataset import DailyPriceProvider
+from .market_ingestion import IngestionFailure as CollectorFailure
 from .universe import SecurityMaster
 
 
@@ -43,6 +44,7 @@ class IngestionPipeline:
                              end_date=end_date.isoformat(), error_type=type(failure).__name__,
                              error_message=failure.error, attempts=failure.attempts, retryable=True)
             for market, failure in report.failure_details
+            if isinstance(failure, CollectorFailure)
         )
         dataset = report.dataset_manifest
         run_id = IngestionRunLedger.new_run_id(market=','.join(markets), start_date=start_date,
