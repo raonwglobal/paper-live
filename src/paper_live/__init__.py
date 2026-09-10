@@ -2,16 +2,11 @@ from .analytics import OHLCV, ScreenRule, ema, max_drawdown, rsi, screen, sharpe
 from .backtest import BacktestResult, BacktestRunner
 from .environment import EnvironmentController, EnvironmentTransitionError, ExecutionEnvironmentMode
 from .execution import (
-    ExecutionGateway,
-    Fill,
-    OrderRequest,
-    OrderSide,
-    OrderType,
-    PaperAccount,
-    PaperOrderRequest,
-    VirtualMatchingEngine,
+    ExecutionGateway, Fill, OrderRequest, OrderSide, OrderType, PaperAccount,
+    PaperOrderRequest, VirtualMatchingEngine,
 )
 from .ingestion_pipeline import IngestionPipeline, IngestionPipelineResult
+from .ingestion_retry import IngestionRetryService, RetryReport
 from .ingestion_run import FailureQueue, IngestionFailure, IngestionRunLedger, IngestionRunManifest
 from .internal_api import InternalApiApp, create_internal_server, serve_internal_api
 from .orchestrator import StateGraph, build_analysis_graph
@@ -25,6 +20,6 @@ __all__ = [
     "sharpe_ratio", "max_drawdown", "BacktestResult", "BacktestRunner", "EpisodicMemory",
     "SelfReflectionWorker", "TradeEpisode", "StateGraph", "build_analysis_graph", "InternalTradeFacade",
     "OrderIntent", "OrderPreview", "RiskAssessment", "InternalApiApp", "create_internal_server",
-    "serve_internal_api", "IngestionPipeline", "IngestionPipelineResult", "FailureQueue",
-    "IngestionFailure", "IngestionRunLedger", "IngestionRunManifest",
+    "serve_internal_api", "IngestionPipeline", "IngestionPipelineResult", "IngestionRetryService", "RetryReport",
+    "FailureQueue", "IngestionFailure", "IngestionRunLedger", "IngestionRunManifest",
 ]
