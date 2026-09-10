@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from math import isfinite
 from typing import Any
-from datetime import datetime, timezone
 
 
 @dataclass(frozen=True)
@@ -20,20 +20,11 @@ class Recommendation:
 
 
 class StockRecommendationAgent:
-    """Deterministic, point-in-time-safe multi-factor screener.
-
-    The agent only consumes features whose available_at is not later than data_as_of.
-    It never executes orders and is therefore safe to use upstream of RiskGuardian.
-    """
+    """Deterministic, point-in-time-safe multi-factor screener."""
 
     DEFAULT_WEIGHTS = {
-        "fundamental_score": 0.25,
-        "momentum_score": 0.20,
-        "technical_score": 0.15,
-        "value_score": 0.15,
-        "quality_score": 0.10,
-        "sentiment_score": 0.10,
-        "risk_score": 0.05,
+        "fundamental_score": 0.25, "momentum_score": 0.20, "technical_score": 0.15,
+        "value_score": 0.15, "quality_score": 0.10, "sentiment_score": 0.10, "risk_score": 0.05,
     }
 
     def __init__(self, weights: Mapping[str, float] | None = None, *, model_version: str = "factor-v1"):
@@ -63,31 +54,22 @@ class StockRecommendationAgent:
             except ValueError:
                 return None
             if decision.tzinfo is None:
-                decision = decision.replace(tzinfo=timezone.utc)
+                decision = decision.replace(tzinfo=UTC)
             if available_dt.tzinfo is None:
-                available_dt = available_dt.replace(tzinfo=timezone.utc)
+                available_dt = available_dt.replace(tzinfo=UTC)
             if available_dt > decision:
-                return None  # explicit look-ahead-bias guard
+                return None
         symbol = str(row.get("symbol", "")).strip()
         if not symbol:
             return None
         weighted = sum(self._score(row.get(key)) * weight for key, weight in self.weights.items())
-        # Confidence rewards agreement among factors and penalizes missing inputs.
         values = [self._score(row.get(key)) for key in self.weights]
         dispersion = max(values) - min(values)
         present = sum(key in row for key in self.weights)
         confidence = max(0.0, min(100.0, 100.0 - dispersion * 0.45)) * (present / len(self.weights))
         reasons = tuple(key.removesuffix("_score").upper() for key in self.weights if self._score(row.get(key)) >= 70)
-        return Recommendation(
-            symbol,
-            round(weighted, 4),
-            0,
-            self.grade(weighted),
-            round(confidence, 2),
-            reasons,
-            self.model_version,
-            as_of,
-        )
+        return Recommendation(symbol, round(weighted, 4), 0, self.grade(weighted), round(confidence, 2), reasons,
+                              self.model_version, as_of)
 
     @staticmethod
     def grade(score: float) -> str:
@@ -102,23 +84,8 @@ class StockRecommendationAgent:
         return "E"
 
     def rank(self, rows: Sequence[Mapping[str, Any]], *, data_as_of: str) -> list[dict[str, Any]]:
-        scored = [self.score(row, data_as_of=data_as_of) for row in rows]
-        results: list[Recommendation] = [item for item in scored if item is not None]
+        results = [item for item in (self.score(row, data_as_of=data_as_of) for row in rows) if item is not None]
         results.sort(key=lambda item: (-item.score, item.symbol))
-        ranked = []
-        for index, item in enumerate(results, 1):
-            ranked.append(
-                asdict(
-                    Recommendation(
-                        item.symbol,
-                        item.score,
-                        index,
-                        item.grade,
-                        item.confidence,
-                        item.reasons,
-                        item.model_version,
-                        item.data_as_of,
-                    )
-                )
-            )
-        return ranked
+        return [asdict(Recommendation(item.symbol, item.score, index, item.grade, item.confidence,
+                                       item.reasons, item.model_version, item.data_as_of))
+                for index, item in enumerate(results, 1)]
