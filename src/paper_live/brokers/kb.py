@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from .protocol import BrokerAdapter, BrokerOrderRequest, OrderResult
 
 BASE_URL = "https://developer.kbsec.com:32484"
+DEFAULT_BUY_ORDER_PATH = "/api/v1/ssam1802"
 
 
 class KbApiError(RuntimeError):
@@ -18,7 +19,7 @@ class KbApiError(RuntimeError):
 class KbCredentials:
     app_key: str
     app_secret: str
-    order_path: str = "/api/v1/ssqm1802"
+    order_path: str = DEFAULT_BUY_ORDER_PATH
 
 
 class KbBrokerAdapter(BrokerAdapter):
@@ -48,7 +49,7 @@ class KbBrokerAdapter(BrokerAdapter):
     def from_env(cls) -> KbBrokerAdapter:
         return cls(
             KbCredentials(
-                os.environ["KB_APP_KEY"], os.environ["KB_APP_SECRET"], os.getenv("KB_ORDER_PATH", "/api/v1/ssqm1802")
+                os.environ["KB_APP_KEY"], os.environ["KB_APP_SECRET"], os.getenv("KB_ORDER_PATH", DEFAULT_BUY_ORDER_PATH)
             )
         )
 
@@ -92,10 +93,9 @@ class KbBrokerAdapter(BrokerAdapter):
             raise KbApiError(str(exc)) from exc
 
     def submit(self, request: BrokerOrderRequest) -> OrderResult:
-        # The public KB guide identifies ssqm1802 as an order endpoint, but
-        # explicitly states that the detailed request fields are finalized by
-        # the official API specification. Do not guess field mappings in a
-        # live-trading adapter. The pinned KB JSON schema must supply them.
+        # The public KB guide identifies SSAM1802 as a buy-order endpoint, but
+        # detailed request fields must come from the pinned official schema.
+        # Do not guess mappings in a live-trading adapter.
         raise NotImplementedError("KB order mapping is blocked until the official JSON API schema is pinned")
 
     def cancel(self, order_id: str) -> bool:
