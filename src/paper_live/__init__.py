@@ -1,5 +1,6 @@
 from .analytics import OHLCV, ScreenRule, ema, max_drawdown, rsi, screen, sharpe_ratio, sma
 from .backtest import BacktestResult, BacktestRunner
+from .daily_recommendation_job import DailyRecommendationJob, DailyRecommendationJobResult
 from .environment import EnvironmentController, EnvironmentTransitionError, ExecutionEnvironmentMode
 from .execution import (
     ExecutionGateway,
@@ -28,4 +29,5 @@ __all__ = [
     "InternalTradeFacade", "OrderIntent", "OrderPreview", "RiskAssessment", "InternalApiApp", "create_internal_server",
     "serve_internal_api", "IngestionPipeline", "IngestionPipelineResult", "IngestionRetryService", "RetryReport",
     "FailureQueue", "IngestionFailure", "IngestionRunLedger", "IngestionRunManifest", "RecommendationPipeline",
+    "DailyRecommendationJob", "DailyRecommendationJobResult",
 ]
