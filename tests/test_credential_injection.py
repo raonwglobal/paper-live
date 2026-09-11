@@ -28,7 +28,7 @@ def test_parse_toss_json_and_legacy():
 
 def test_parse_kb_json():
     creds = parse_kb_credentials(json.dumps({"app_key": "k", "app_secret": "s"}))
-    assert creds == KbCredentials("k", "s", "/api/v1/ssqm1802")
+    assert creds == KbCredentials("k", "s", "/api/v1/ssam1802")
 
 
 def test_toss_apply_and_clear_restores_base():
