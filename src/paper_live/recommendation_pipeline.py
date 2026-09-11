@@ -29,6 +29,27 @@ class RecommendationPipeline:
         payload = json.dumps(list(rows), sort_keys=True, separators=(",", ":"), default=str).encode()
         return sha256(payload).hexdigest()
 
+    @staticmethod
+    def _bounded_score(value: Any, scale: float = 1.0, *, inverse: bool = False) -> float:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return 50.0
+        score = 50.0 + (50.0 if inverse else -50.0) * number * scale
+        return round(max(0.0, min(100.0, score)), 4)
+
+    def _factorize(self, row: dict[str, Any]) -> dict[str, Any]:
+        """Project raw daily features into the stable 0..100 recommendation factors."""
+        result = dict(row)
+        result.setdefault("fundamental_score", 50.0)
+        result.setdefault("value_score", 50.0)
+        result.setdefault("quality_score", 50.0)
+        result.setdefault("sentiment_score", 50.0)
+        result["momentum_score"] = self._bounded_score(result.get("momentum"), 100.0)
+        result["technical_score"] = self._bounded_score(result.get("return_1d"), 100.0)
+        result["risk_score"] = self._bounded_score(result.get("volatility"), 100.0, inverse=True)
+        return result
+
     def run(self, feature_rows: Sequence[dict[str, Any]], *, data_as_of: str,
             dataset: str = "recommendations/daily") -> tuple[list[dict[str, Any]], DatasetManifest]:
         ranked = self.agent.rank(feature_rows, data_as_of=data_as_of)
@@ -51,7 +72,8 @@ class RecommendationPipeline:
             row["input_checksum_sha256"] = input_checksum
         feature_manifest = self.storage.write_snapshot(feature_dataset, features, as_of=decision_time,
                                                         schema_version="daily-features-v1")
-        ranked = self.feature_service.rank(features, data_as_of=decision_time)
+        factor_rows = [self._factorize(row) for row in features]
+        ranked = self.feature_service.rank(factor_rows, data_as_of=decision_time)
         for row in ranked:
             row["decision_time"] = decision_time
             row["dataset_version"] = "recommendation-v1"
