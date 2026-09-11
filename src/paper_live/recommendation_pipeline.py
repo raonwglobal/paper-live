@@ -35,11 +35,12 @@ class RecommendationPipeline:
             number = float(value)
         except (TypeError, ValueError):
             return 50.0
-        score = 50.0 + (50.0 if inverse else -50.0) * number * scale
+        direction = -1.0 if inverse else 1.0
+        score = 50.0 + 50.0 * number * scale * direction
         return round(max(0.0, min(100.0, score)), 4)
 
     def _factorize(self, row: dict[str, Any]) -> dict[str, Any]:
-        """Project raw daily features into the stable 0..100 recommendation factors."""
+        """Project raw daily features into stable 0..100 recommendation factors."""
         result = dict(row)
         result.setdefault("fundamental_score", 50.0)
         result.setdefault("value_score", 50.0)
