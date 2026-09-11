@@ -39,7 +39,13 @@ class DailyRecommendationJob:
 
     def run(self, *, start_date: date, end_date: date, decision_time: str,
             available_at: str | None = None) -> DailyRecommendationJobResult:
-        ingestion = self.ingestion.run(start_date=start_date, end_date=end_date, available_at=available_at)
+        # A backfill/replay caller can supply a distinct source-availability time. If it
+        # is omitted, bind ingestion availability to the requested decision boundary so
+        # the resulting feature set remains usable by the point-in-time filter.
+        ingestion_available_at = available_at or decision_time
+        ingestion = self.ingestion.run(
+            start_date=start_date, end_date=end_date, available_at=ingestion_available_at
+        )
         ranked: tuple[dict, ...] = ()
         feature_manifest = recommendation_manifest = None
         if ingestion.rows:
