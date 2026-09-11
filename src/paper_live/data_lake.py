@@ -121,9 +121,10 @@ class GoogleDriveStorageAgent:
         return hashlib.sha256(content).hexdigest()
 
     def _dataset_folder(self, dataset: str, as_of: str) -> str:
-        current = self.folder_id
+        current: str | None = self.folder_id
         for part in [p for p in dataset.strip("/").split("/") if p] + [f"date={as_of.replace(':', '-')}"]:
             current = self.client.ensure_folder(part, parent_id=current)
+        assert current is not None
         return current
 
     def write_jsonl(self, dataset: str, rows: Sequence[dict[str, Any]], *, as_of: str, schema_version: str = "1.0", run_id: str | None = None, success_count: int = 0, failure_count: int = 0) -> DatasetManifest:
