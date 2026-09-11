@@ -13,7 +13,7 @@ from .ingestion_run import (
     build_manifest,
     utc_now,
 )
-from .market_dataset import DailyPriceProvider
+from .market_dataset import DailyPriceProvider, DailyPriceRecord
 from .market_ingestion import IngestionFailure as CollectorFailure
 from .universe import SecurityMaster
 
@@ -25,6 +25,7 @@ class IngestionPipelineResult:
     manifest_artifact_id: str | None = None
     failure_artifact_id: str | None = None
     dataset_manifest: object | None = None
+    rows: tuple[DailyPriceRecord, ...] = ()
 
 
 class IngestionPipeline:
@@ -64,5 +65,5 @@ class IngestionPipeline:
                                   finished_at=report.completed_at)
         if self.ledger:
             manifest_id, failure_id = self.ledger.write(manifest, failures)
-            return IngestionPipelineResult(manifest, failures, manifest_id, failure_id, dataset)
-        return IngestionPipelineResult(manifest, failures, dataset_manifest=dataset)
+            return IngestionPipelineResult(manifest, failures, manifest_id, failure_id, dataset, report.rows)
+        return IngestionPipelineResult(manifest, failures, dataset_manifest=dataset, rows=report.rows)
