@@ -76,10 +76,16 @@ class TossBrokerAdapter(BrokerAdapter):
             data=body,
             headers={"Authorization": f"Basic {auth}", "Content-Type": "application/x-www-form-urlencoded"},
         )
-        with urllib.request.urlopen(req, timeout=self.timeout) as response:
-            payload = json.load(response)
-        self._token = payload["access_token"]
-        return self._token
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as response:
+                payload = json.load(response)
+        except Exception as exc:
+            raise TossApiError(f"token request failed: {type(exc).__name__}") from exc
+        token = payload.get("access_token")
+        if not isinstance(token, str) or not token:
+            raise TossApiError("token response did not contain access_token")
+        self._token = token
+        return token
 
     def _request(self, method: str, path: str, body: dict | None = None) -> dict:
         credentials = self._require_credentials()
@@ -92,9 +98,39 @@ class TossBrokerAdapter(BrokerAdapter):
         req = urllib.request.Request(f"{BASE_URL}{path}", data=data, headers=headers, method=method)
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as response:
-                return json.load(response)
+                payload = json.load(response)
         except Exception as exc:
-            raise TossApiError(str(exc)) from exc
+            raise TossApiError(f"Toss API request failed: {type(exc).__name__}") from exc
+        if not isinstance(payload, dict):
+            raise TossApiError("Toss API response was not a JSON object")
+        return payload
+
+    @staticmethod
+    def _validate_order(request: BrokerOrderRequest) -> tuple[str, str]:
+        side = request.side.strip().upper()
+        order_type = request.order_type.strip().upper()
+        if side not in {"BUY", "SELL"} or order_type not in {"LIMIT", "MARKET"}:
+            raise ValueError("unsupported Toss order request")
+        if not request.symbol.strip():
+            raise ValueError("symbol is required")
+        if request.quantity <= 0:
+            raise ValueError("quantity must be positive")
+        if order_type == "LIMIT":
+            if request.price is None or request.price <= 0:
+                raise ValueError("limit orders require a positive price")
+        elif request.price is not None:
+            raise ValueError("market orders must not include price")
+        return side, order_type
+
+    @staticmethod
+    def _result_from_response(response: dict) -> OrderResult:
+        result = response.get("result")
+        if not isinstance(result, dict):
+            return OrderResult("toss", "", False, "Toss API response did not contain result")
+        order_id = result.get("orderId")
+        if not isinstance(order_id, str) or not order_id.strip():
+            return OrderResult("toss", "", False, "Toss API response did not contain orderId")
+        return OrderResult("toss", order_id, True)
 
     def submit(
         self,
@@ -115,23 +151,18 @@ class TossBrokerAdapter(BrokerAdapter):
             if side is None or quantity is None:
                 raise ValueError("side and quantity are required")
             request = BrokerOrderRequest(
-                str(request_or_symbol), side, quantity, "limit" if price is not None else "market"
+                str(request_or_symbol), side, quantity, "limit" if price is not None else "market", price
             )
-        side = request.side.upper()
-        order_type = request.order_type.upper()
-        if side not in {"BUY", "SELL"} or order_type not in {"LIMIT", "MARKET"}:
-            raise ValueError("unsupported Toss order request")
+        side, order_type = self._validate_order(request)
         payload = {
             "symbol": request.symbol,
             "side": side,
             "orderType": order_type,
             "quantity": str(request.quantity),
         }
-        if price is not None:
-            payload["price"] = str(price)
-        response = self._request("POST", "/api/v1/orders", payload)
-        result = response.get("result", {})
-        return OrderResult(self.name, result.get("orderId", ""), True)
+        if request.price is not None:
+            payload["price"] = str(request.price)
+        return self._result_from_response(self._request("POST", "/api/v1/orders", payload))
 
     def submit_typed_order(
         self,
@@ -149,7 +180,13 @@ class TossBrokerAdapter(BrokerAdapter):
             raise PermissionError("Toss live execution is disabled by default")
         if (quantity is None) == (order_amount is None):
             raise ValueError("exactly one of quantity or order_amount is required")
-        payload = {"symbol": symbol, "side": side, "orderType": order_type}
+        if quantity is not None and quantity <= 0:
+            raise ValueError("quantity must be positive")
+        if order_amount is not None and order_amount <= 0:
+            raise ValueError("order_amount must be positive")
+        request = BrokerOrderRequest(symbol, side, quantity or Decimal("1"), order_type, price)
+        normalized_side, normalized_type = self._validate_order(request)
+        payload = {"symbol": symbol, "side": normalized_side, "orderType": normalized_type}
         if quantity is not None:
             payload["quantity"] = str(quantity)
         if order_amount is not None:
@@ -160,11 +197,12 @@ class TossBrokerAdapter(BrokerAdapter):
             payload["clientOrderId"] = client_order_id
         if time_in_force:
             payload["timeInForce"] = time_in_force
-        result = self._request("POST", "/api/v1/orders", payload).get("result", {})
-        return OrderResult(self.name, result.get("orderId", ""), True)
+        return self._result_from_response(self._request("POST", "/api/v1/orders", payload))
 
     def cancel(self, order_id: str) -> bool:
         if not self._live_enabled():
             raise PermissionError("Toss live execution is disabled by default")
+        if not order_id.strip():
+            raise ValueError("order_id is required")
         self._request("POST", f"/api/v1/orders/{urllib.parse.quote(order_id, safe='')}/cancel")
         return True
