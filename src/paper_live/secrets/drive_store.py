@@ -78,8 +78,9 @@ class GoogleDriveSecretStore:
 
     def _drive_query_params(self) -> str:
         params = {"supportsAllDrives": "true"}
-        if self.drive_id:
-            params.update({"includeItemsFromAllDrives": "true", "corpora": "drive", "driveId": self.drive_id})
+        drive_id = getattr(self, "drive_id", None)
+        if drive_id:
+            params.update({"includeItemsFromAllDrives": "true", "corpora": "drive", "driveId": drive_id})
         return urllib.parse.urlencode(params)
 
     def _drive_file_url(self, file_id: str, *, alt_media: bool = False) -> str:
@@ -136,13 +137,14 @@ class GoogleDriveSecretStore:
         return [SecretRecord(row[0], row[3], row[1], row[2], tuple(json.loads(row[4])), row[5], row[6]) for row in rows]
 
     def _download(self) -> bytes | None:
-        if not self.file_id:
+        if not getattr(self, "file_id", None):
             return None
         return self._request("GET", self._drive_file_url(self.file_id, alt_media=True))
 
     def _find_file_id(self) -> str | None:
-        if self.file_id:
-            return self.file_id
+        file_id = getattr(self, "file_id", None)
+        if file_id:
+            return file_id
         query = urllib.parse.quote(f"name='{self.FILE_NAME}' and trashed=false")
         params = self._drive_query_params() + "&fields=files(id,name)"
         payload = json.loads(
