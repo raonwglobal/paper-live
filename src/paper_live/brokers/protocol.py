@@ -7,12 +7,13 @@ from typing import Protocol
 
 @dataclass(frozen=True)
 class BrokerOrderRequest:
-    """Live broker order intent for BrokerAdapter / BrokerRouter."""
+    """Normalized broker order intent shared by paper and live adapters."""
 
     symbol: str
     side: str
     quantity: Decimal
     order_type: str = "market"
+    price: Decimal | None = None
 
 
 # Backward-compatible alias (prefer BrokerOrderRequest in new code).
