@@ -46,6 +46,7 @@ class GoogleDriveSecretStore:
             raise ValueError("GOOGLE_DRIVE_SECRET_KEY must be exactly 32 bytes (base64 or raw)")
         self.encryption_key = raw_key
         self.file_id = file_id or os.getenv("GOOGLE_DRIVE_SECRET_FILE_ID")
+        self.drive_id = os.getenv("GOOGLE_DRIVE_SECRET_DRIVE_ID")
 
     @staticmethod
     def _key_from_env() -> bytes:
@@ -74,6 +75,18 @@ class GoogleDriveSecretStore:
                 return response.read()
         except Exception as exc:
             raise RuntimeError(f"Google Drive request failed: {type(exc).__name__}") from exc
+
+    def _drive_query_params(self) -> str:
+        params = {"supportsAllDrives": "true"}
+        if self.drive_id:
+            params.update({"includeItemsFromAllDrives": "true", "corpora": "drive", "driveId": self.drive_id})
+        return urllib.parse.urlencode(params)
+
+    def _drive_file_url(self, file_id: str, *, alt_media: bool = False) -> str:
+        params = self._drive_query_params()
+        if alt_media:
+            params += "&alt=media"
+        return f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?{params}"
 
     def _encrypt(self, records: list[SecretRecord]) -> bytes:
         with tempfile.TemporaryDirectory() as directory:
@@ -125,19 +138,21 @@ class GoogleDriveSecretStore:
     def _download(self) -> bytes | None:
         if not self.file_id:
             return None
-        return self._request(
-            "GET", f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(self.file_id, safe='')}?alt=media"
-        )
+        return self._request("GET", self._drive_file_url(self.file_id, alt_media=True))
 
     def _find_file_id(self) -> str | None:
         if self.file_id:
             return self.file_id
         query = urllib.parse.quote(f"name='{self.FILE_NAME}' and trashed=false")
+        params = self._drive_query_params() + "&fields=files(id,name)"
         payload = json.loads(
-            self._request("GET", f"https://www.googleapis.com/drive/v3/files?q={query}&fields=files(id,name)")
+            self._request("GET", f"https://www.googleapis.com/drive/v3/files?q={query}&{params}")
         )
         files = payload.get("files", [])
-        return files[0]["id"] if files else None
+        if not files:
+            return None
+        self.file_id = files[0]["id"]
+        return self.file_id
 
     def _upload(self, blob: bytes) -> str:
         boundary = "paperlive-" + pysecrets.token_hex(12)
@@ -153,10 +168,11 @@ class GoogleDriveSecretStore:
             + blob
             + f"\r\n--{boundary}--\r\n".encode()
         )
+        params = urllib.parse.urlencode({"uploadType": "multipart", "fields": "id", "supportsAllDrives": "true"})
         result = json.loads(
             self._request(
                 "POST",
-                "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
+                f"https://www.googleapis.com/upload/drive/v3/files?{params}",
                 body,
                 f"multipart/related; boundary={boundary}",
             )
@@ -165,9 +181,10 @@ class GoogleDriveSecretStore:
         return self.file_id
 
     def _update(self, file_id: str, blob: bytes) -> None:
+        params = urllib.parse.urlencode({"uploadType": "media", "supportsAllDrives": "true"})
         self._request(
             "PATCH",
-            f"https://www.googleapis.com/upload/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?uploadType=media",
+            f"https://www.googleapis.com/upload/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?{params}",
             blob,
             "application/octet-stream",
         )
@@ -176,11 +193,7 @@ class GoogleDriveSecretStore:
         file_id = self._find_file_id()
         if not file_id:
             raise KeyError(secret_id)
-        records = self._decrypt(
-            self._request(
-                "GET", f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?alt=media"
-            )
-        )
+        records = self._decrypt(self._request("GET", self._drive_file_url(file_id, alt_media=True)))
         for record in records:
             if record.secret_id != secret_id or record.status != "active":
                 continue
@@ -189,6 +202,8 @@ class GoogleDriveSecretStore:
                     expires = datetime.fromisoformat(record.expires_at.replace("Z", "+00:00"))
                 except ValueError as exc:
                     raise RuntimeError("invalid secret expiration metadata") from exc
+                if expires.tzinfo is None:
+                    raise RuntimeError("secret expiration metadata must include a timezone")
                 if expires <= datetime.now(UTC):
                     raise KeyError(secret_id)
             return record.value
@@ -198,11 +213,7 @@ class GoogleDriveSecretStore:
         file_id = self._find_file_id()
         records = []
         if file_id:
-            records = self._decrypt(
-                self._request(
-                    "GET", f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?alt=media"
-                )
-            )
+            records = self._decrypt(self._request("GET", self._drive_file_url(file_id, alt_media=True)))
         records = [r for r in records if r.secret_id != record.secret_id]
         records.append(record)
         blob = self._encrypt(records)
@@ -215,11 +226,7 @@ class GoogleDriveSecretStore:
         file_id = self._find_file_id()
         if not file_id:
             raise KeyError(secret_id)
-        records = self._decrypt(
-            self._request(
-                "GET", f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?alt=media"
-            )
-        )
+        records = self._decrypt(self._request("GET", self._drive_file_url(file_id, alt_media=True)))
         found = False
         updated = []
         for r in records:
