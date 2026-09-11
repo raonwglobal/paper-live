@@ -137,9 +137,10 @@ class GoogleDriveSecretStore:
         return [SecretRecord(row[0], row[3], row[1], row[2], tuple(json.loads(row[4])), row[5], row[6]) for row in rows]
 
     def _download(self) -> bytes | None:
-        if not getattr(self, "file_id", None):
+        file_id = getattr(self, "file_id", None)
+        if not file_id:
             return None
-        return self._request("GET", self._drive_file_url(self.file_id, alt_media=True))
+        return self._request("GET", self._drive_file_url(file_id, alt_media=True))
 
     def _find_file_id(self) -> str | None:
         file_id = getattr(self, "file_id", None)
