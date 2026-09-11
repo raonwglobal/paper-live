@@ -93,13 +93,28 @@ class IngestionRunLedger:
         return hashlib.sha256(canonical).hexdigest()[:24]
 
     def write(self, manifest: IngestionRunManifest, failures: FailureQueue) -> tuple[str, str]:
-        prefix = f"runs/{manifest.market}/{manifest.run_id}"
-        manifest_id = self.writer.upload(f"{prefix}/manifest.json",
+        root = self.folder_id
+        # Materialize the same logical hierarchy on Drive and on the local mirror.
+        # Writers that only implement upload retain the legacy flat-name behavior.
+        ensure_folder = getattr(self.writer, "ensure_folder", None)
+        if callable(ensure_folder):
+            runs_folder = ensure_folder("runs", parent_id=root)
+            market_folder = ensure_folder(manifest.market, parent_id=runs_folder)
+            run_folder = ensure_folder(manifest.run_id, parent_id=market_folder)
+            manifest_name = "manifest.json"
+            failure_name = "failures.jsonl"
+            target_folder = run_folder
+        else:
+            prefix = f"runs/{manifest.market}/{manifest.run_id}"
+            manifest_name = f"{prefix}/manifest.json"
+            failure_name = f"{prefix}/failures.jsonl"
+            target_folder = root
+        manifest_id = self.writer.upload(manifest_name,
                                          json.dumps(asdict(manifest), ensure_ascii=False, sort_keys=True,
-                                                    indent=2).encode("utf-8"), folder_id=self.folder_id,
+                                                    indent=2).encode("utf-8"), folder_id=target_folder,
                                          mime_type="application/json")
-        failure_id = self.writer.upload(f"{prefix}/failures.jsonl", failures.to_jsonl(),
-                                        folder_id=self.folder_id, mime_type="application/x-ndjson")
+        failure_id = self.writer.upload(failure_name, failures.to_jsonl(),
+                                        folder_id=target_folder, mime_type="application/x-ndjson")
         return manifest_id, failure_id
 
 
