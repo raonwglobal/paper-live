@@ -17,12 +17,14 @@ class FakeBroker:
 
     def __init__(self):
         self.last_request: BrokerOrderRequest | None = None
+        self.cancelled: list[str] = []
 
     def submit(self, request: BrokerOrderRequest) -> OrderResult:
         self.last_request = request
         return OrderResult("toss", "ord-1", True, "ok")
 
     def cancel(self, order_id: str) -> bool:
+        self.cancelled.append(order_id)
         return True
 
 
@@ -145,3 +147,42 @@ def test_secret_policy_blocks_resolve_in_paper_mode():
     broker = SecretBroker(store, SecretPolicy(live_secret_ids=frozenset({"toss-order"})))
     with pytest.raises(SecretAccessDenied):
         broker.resolve(secret_id="toss-order", mode="PAPER_SANDBOX", capability="order.create")
+
+
+def test_live_cancel_requires_approval_and_succeeds():
+    import hashlib
+    import hmac
+
+    secret = "env-secret"
+    token = hmac.new(secret.encode(), b"environment-transition", hashlib.sha256).hexdigest()
+    from paper_live.live_approval import LiveApprovalGate as EnvGate
+
+    env_gate = EnvGate()
+    env_gate.approve("operator", "promote")
+    controller = EnvironmentController(transition_secret=secret, live_approval_gate=env_gate)
+    account = PaperAccount(Decimal("1000000"))
+    gateway = ExecutionGateway(controller, VirtualMatchingEngine(account))
+    risk = RiskGuardian(controller, account)
+    order_gate = LiveApprovalGate()
+    fake = FakeBroker()
+    router = BrokerRouter({"toss": fake}, approval_gate=order_gate)
+    secret_broker = SecretBroker(
+        InMemorySecretStore({"toss-order": "secret-token-value"}),
+        SecretPolicy(live_secret_ids=frozenset({"toss-order"})),
+    )
+    facade = InternalTradeFacade(controller, risk, gateway, router, order_gate, secret_broker)
+    controller.set_mode(ExecutionEnvironmentMode.REAL_LIVE, token)
+
+    with pytest.raises(PermissionError):
+        facade.cancel(broker="toss", order_id="ord-9")
+
+    approval = order_gate.approve("operator", order_gate.nonce)
+    assert facade.cancel(broker="toss", order_id="ord-9", approval_id=approval.approval_id) is True
+    assert fake.cancelled == ["ord-9"]
+
+
+def test_cancel_rejected_outside_real_live():
+    facade, _controller, order_gate, _router = _facade()
+    approval = order_gate.approve("operator", order_gate.nonce)
+    with pytest.raises(PermissionError, match="REAL_LIVE"):
+        facade.cancel(broker="toss", order_id="ord-1", approval_id=approval.approval_id)
