@@ -174,11 +174,14 @@ class InternalApiApp:
         if not order_id:
             raise InternalApiError(400, "MISSING_ORDER_ID", "order_id is required")
         approval_id = body.get("approval_id") or body.get("approvalId")
+        symbol_raw = body.get("symbol") or body.get("is_cd")
+        symbol = str(symbol_raw).strip() if symbol_raw is not None else None
         try:
             ok = self.facade.cancel(
                 broker=broker,
                 order_id=order_id,
                 approval_id=str(approval_id) if approval_id else None,
+                symbol=symbol or None,
             )
         except PermissionError as exc:
             raise InternalApiError(403, "CANCEL_DENIED", str(exc)) from exc
@@ -190,7 +193,6 @@ class InternalApiApp:
 def make_handler(app: InternalApiApp) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
-            # Keep CI/test output quiet; operators can wrap with a logger later.
             return
 
         def _read_json(self) -> dict[str, Any]:
