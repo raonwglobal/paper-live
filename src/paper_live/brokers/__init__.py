@@ -5,7 +5,7 @@ individual broker adapters must not be shadowed by a legacy ``brokers.py``
 module.
 """
 
-from .kb import KbApiError, KbBrokerAdapter, KbCredentials
+from .kb import KbApiError, KbBrokerAdapter, KbCredentials, KbOrderSchemaUnavailable
 from .protocol import BrokerAdapter, BrokerOrderRequest, LiveBrokerDenied, OrderResult
 from .safe_router import BrokerRouter
 from .toss import TossApiError, TossBrokerAdapter, TossCredentials
@@ -29,4 +29,5 @@ __all__ = [
     "KBBrokerAdapter",
     "KbCredentials",
     "KbApiError",
+    "KbOrderSchemaUnavailable",
 ]
