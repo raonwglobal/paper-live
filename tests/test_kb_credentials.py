@@ -24,8 +24,11 @@ def test_kb_empty_credentials_are_rejected() -> None:
         parse_kb_credentials("")
 
 
-def test_kb_submit_stays_blocked_without_pinned_order_schema() -> None:
+def test_kb_submit_blocked_when_live_flag_disabled(monkeypatch) -> None:
+    monkeypatch.delenv("PAPER_LIVE_ENABLE_LIVE", raising=False)
     adapter = KbBrokerAdapter(KbCredentials("key", "secret"))
+    from decimal import Decimal
+    from paper_live.brokers.protocol import BrokerOrderRequest
 
-    with pytest.raises(NotImplementedError, match="official JSON API schema"):
-        adapter.submit(None)  # type: ignore[arg-type]
+    with pytest.raises(PermissionError, match="disabled by default"):
+        adapter.submit(BrokerOrderRequest("005930", "BUY", Decimal("1"), "limit", Decimal("1000")))
