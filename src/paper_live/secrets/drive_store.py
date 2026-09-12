@@ -144,6 +144,8 @@ class GoogleDriveSecretStore:
 
     def _find_file_id(self) -> str | None:
         file_id = getattr(self, "file_id", None)
+        if not isinstance(file_id, str) or not file_id:
+            file_id = None
         if file_id:
             return file_id
         query = urllib.parse.quote(f"name='{self.FILE_NAME}' and trashed=false")
@@ -154,8 +156,11 @@ class GoogleDriveSecretStore:
         files = payload.get("files", [])
         if not files:
             return None
-        self.file_id = files[0]["id"]
-        return self.file_id
+        found_id = files[0]["id"]
+        if not isinstance(found_id, str) or not found_id:
+            raise RuntimeError("Google Drive returned an invalid file id")
+        self.file_id = found_id
+        return found_id
 
     def _upload(self, blob: bytes) -> str:
         boundary = "paperlive-" + pysecrets.token_hex(12)
@@ -180,8 +185,11 @@ class GoogleDriveSecretStore:
                 f"multipart/related; boundary={boundary}",
             )
         )
-        self.file_id = result["id"]
-        return self.file_id
+        found_id = result["id"]
+        if not isinstance(found_id, str) or not found_id:
+            raise RuntimeError("Google Drive upload returned an invalid file id")
+        self.file_id = found_id
+        return found_id
 
     def _update(self, file_id: str, blob: bytes) -> None:
         params = urllib.parse.urlencode({"uploadType": "media", "supportsAllDrives": "true"})
