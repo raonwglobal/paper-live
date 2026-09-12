@@ -11,17 +11,16 @@ from .protocol import BrokerAdapter, BrokerOrderRequest, OrderResult
 BASE_URL = "https://developer.kbsec.com:32484"
 DEFAULT_BUY_ORDER_PATH = "/api/v1/ssam1802"
 DEFAULT_SELL_ORDER_PATH = "/api/v1/ssam1801"
+DEFAULT_MODIFY_ORDER_PATH = "/api/v1/ssam1805"
 DEFAULT_CANCEL_ORDER_PATH = "/api/v1/ssam1806"
-
-# SSAM180x order type codes (pinned domestic cash order schema).
-ORDER_CCD_LIMIT = "00"
-ORDER_CCD_MARKET = "03"
-MKT_TM_REGULAR = "1"
-CANCEL_FULL = "2"
 
 
 class KbApiError(RuntimeError):
     pass
+
+
+class KbOrderSchemaUnavailable(RuntimeError):
+    """Raised when a KB order schema is not pinned from authoritative documentation."""
 
 
 @dataclass(frozen=True)
@@ -42,7 +41,7 @@ class KbBrokerAdapter(BrokerAdapter):
         self._ephemeral = False
 
     def apply_secret_material(self, material: str) -> None:
-        """Inject host-resolved credentials for the next live calls; not for agents."""
+        """Inject host-resolved credentials for the next gated live call."""
         from .credentials import parse_kb_credentials
 
         self.credentials = parse_kb_credentials(material)
@@ -93,10 +92,14 @@ class KbBrokerAdapter(BrokerAdapter):
         )
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as response:
-                self._token = json.load(response)["access_token"]
-                return self._token
+                payload_obj = json.load(response)
         except Exception as exc:
             raise KbApiError(f"KB token request failed: {type(exc).__name__}") from exc
+        token = payload_obj.get("access_token") if isinstance(payload_obj, dict) else None
+        if not isinstance(token, str) or not token.strip():
+            raise KbApiError("KB token response did not contain access_token")
+        self._token = token.strip()
+        return self._token
 
     def _request(self, method: str, path: str, body: dict) -> dict:
         self._require_credentials()
@@ -128,12 +131,9 @@ class KbBrokerAdapter(BrokerAdapter):
             raise ValueError("symbol is required")
         if request.quantity <= 0:
             raise ValueError("quantity must be positive")
-        if request.quantity != request.quantity.to_integral_value():
-            raise ValueError("KB cash orders require whole-share quantity")
-        if order_type == "LIMIT":
-            if request.price is None or request.price <= 0:
-                raise ValueError("limit orders require a positive price")
-        elif request.price is not None:
+        if order_type == "LIMIT" and (request.price is None or request.price <= 0):
+            raise ValueError("limit orders require a positive price")
+        if order_type == "MARKET" and request.price is not None:
             raise ValueError("market orders must not include price")
         return side, order_type
 
@@ -143,21 +143,11 @@ class KbBrokerAdapter(BrokerAdapter):
 
     @staticmethod
     def _build_order_body(request: BrokerOrderRequest, side: str, order_type: str) -> dict[str, str]:
-        qty = str(int(request.quantity))
-        if order_type == "LIMIT":
-            assert request.price is not None
-            price = str(int(request.price))
-            ccd = ORDER_CCD_LIMIT
-        else:
-            price = "0"
-            ccd = ORDER_CCD_MARKET
-        return {
-            "mkt_tm_clsf": MKT_TM_REGULAR,
-            "is_cd": request.symbol.strip(),
-            "ordr_q": qty,
-            "ordr_uprc": price,
-            "ordr_ccd": ccd,
-        }
+        """Refuse to serialize fields whose KB names have not been authoritatively pinned."""
+        del request, side, order_type
+        raise KbOrderSchemaUnavailable(
+            "KB SSAM1801/SSAM1802 request fields are not fully pinned; refusing to guess order payload"
+        )
 
     @staticmethod
     def _result_from_response(response: dict) -> OrderResult:
@@ -175,7 +165,7 @@ class KbBrokerAdapter(BrokerAdapter):
         quantity: Decimal | None = None,
         price: Decimal | None = None,
     ) -> OrderResult:
-        """Submit buy/sell via SSAM1802/SSAM1801 when live execution is enabled."""
+        """Validate intent but fail closed until the complete KB order schema is pinned."""
         if not self._live_enabled():
             raise PermissionError("KB live execution is disabled by default")
         if isinstance(request_or_symbol, BrokerOrderRequest):
@@ -191,25 +181,17 @@ class KbBrokerAdapter(BrokerAdapter):
                 price,
             )
         side_n, order_type = self._validate_order(request)
-        body = self._build_order_body(request, side_n, order_type)
-        path = self._path_for_side(side_n)
-        return self._result_from_response(self._request("POST", path, body))
+        self._build_order_body(request, side_n, order_type)
+        raise AssertionError("unreachable")
 
     def cancel(self, order_id: str, *, symbol: str | None = None) -> bool:
-        """Cancel via SSAM1806. symbol (is_cd) is required by the pinned schema."""
+        """Fail closed until the complete SSAM1806 cancel schema is pinned."""
         if not self._live_enabled():
             raise PermissionError("KB live execution is disabled by default")
         if not order_id.strip():
             raise ValueError("order_id is required")
         if symbol is None or not str(symbol).strip() or str(symbol).strip() == "-":
             raise ValueError("symbol is required for KB cancel")
-        body = {
-            "is_cd": str(symbol).strip(),
-            "crct_clsf": CANCEL_FULL,
-            "orgn_ordr_no": order_id.strip(),
-        }
-        response = self._request("POST", DEFAULT_CANCEL_ORDER_PATH, body)
-        order_no = response.get("ordr_no")
-        if order_no is not None and (not isinstance(order_no, str) or not order_no.strip()):
-            return False
-        return True
+        raise KbOrderSchemaUnavailable(
+            "KB SSAM1806 cancel fields are not fully pinned; refusing to guess cancel payload"
+        )
