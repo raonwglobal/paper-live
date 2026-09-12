@@ -138,7 +138,7 @@ class GoogleDriveSecretStore:
 
     def _download(self) -> bytes | None:
         file_id = getattr(self, "file_id", None)
-        if not file_id:
+        if not isinstance(file_id, str) or not file_id:
             return None
         return self._request("GET", self._drive_file_url(file_id, alt_media=True))
 
@@ -231,15 +231,23 @@ class GoogleDriveSecretStore:
             raise KeyError(secret_id)
         records = self._decrypt(self._request("GET", self._drive_file_url(file_id, alt_media=True)))
         found = False
-        updated = []
-        for r in records:
-            if r.secret_id == secret_id:
+        updated: list[SecretRecord] = []
+        for record in records:
+            if record.secret_id == secret_id:
                 found = True
                 updated.append(
-                    SecretRecord(r.secret_id, r.value, r.provider, r.environment, r.scopes, r.expires_at, "revoked")
+                    SecretRecord(
+                        record.secret_id,
+                        record.value,
+                        record.provider,
+                        record.environment,
+                        record.scopes,
+                        record.expires_at,
+                        "revoked",
+                    )
                 )
             else:
-                updated.append(r)
+                updated.append(record)
         if not found:
             raise KeyError(secret_id)
         self._update(file_id, self._encrypt(updated))
