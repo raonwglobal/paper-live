@@ -32,7 +32,8 @@ class BrokerAdapter(Protocol):
     name: str
 
     def submit(self, request: BrokerOrderRequest) -> OrderResult: ...
-    def cancel(self, order_id: str) -> bool: ...
+
+    def cancel(self, order_id: str, *, symbol: str | None = None) -> bool: ...
 
 
 class LiveBrokerDenied(PermissionError):

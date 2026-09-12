@@ -26,9 +26,17 @@ class BrokerRouter:
             raise LiveBrokerDenied(f"broker adapter is not configured: {broker}")
         return adapter.submit(request)
 
-    def cancel(self, mode: str, broker: str, order_id: str, approval_id: str | None = None) -> bool:
+    def cancel(
+        self,
+        mode: str,
+        broker: str,
+        order_id: str,
+        approval_id: str | None = None,
+        *,
+        symbol: str | None = None,
+    ) -> bool:
         self._authorize(mode, approval_id)
         adapter = self.adapters.get(broker)
         if adapter is None:
             raise LiveBrokerDenied(f"broker adapter is not configured: {broker}")
-        return adapter.cancel(order_id)
+        return adapter.cancel(order_id, symbol=symbol)
