@@ -199,7 +199,7 @@ class TossBrokerAdapter(BrokerAdapter):
             payload["timeInForce"] = time_in_force
         return self._result_from_response(self._request("POST", "/api/v1/orders", payload))
 
-    def cancel(self, order_id: str) -> bool:
+    def cancel(self, order_id: str, *, symbol: str | None = None) -> bool:
         if not self._live_enabled():
             raise PermissionError("Toss live execution is disabled by default")
         if not order_id.strip():
