@@ -156,7 +156,6 @@ class InternalTradeFacade:
         secret_id = self.broker_secret_ids.get(intent.broker)
         if not secret_id:
             raise PermissionError(f"no secret mapping for broker: {intent.broker}")
-        # Value is resolved only for host/adapter use; never returned to callers.
         return self.secret_broker.resolve(
             secret_id=secret_id,
             mode=ExecutionEnvironmentMode.REAL_LIVE.value,
@@ -234,6 +233,7 @@ class InternalTradeFacade:
         broker: str,
         order_id: str,
         approval_id: str | None = None,
+        symbol: str | None = None,
     ) -> bool:
         """Cancel a live order; paper path has no remote cancel (lifecycle only)."""
         mode = self.controller.get_current_mode()
@@ -244,11 +244,17 @@ class InternalTradeFacade:
         if self.order_approval_gate is None or approval_id is None:
             raise PermissionError("explicit live approval_id is required")
         self.order_approval_gate.require(approval_id)
-        # Reuse broker secret mapping with a synthetic intent for resolve.
-        intent = OrderIntent(symbol="-", side="BUY", quantity=Decimal("1"), broker=broker)
+        intent = OrderIntent(
+            symbol=(symbol or "-"),
+            side="BUY",
+            quantity=Decimal("1"),
+            broker=broker,
+        )
         adapter = self._inject_credentials(intent, capability="order.cancel")
         try:
-            return self.broker_router.cancel(mode.value, broker, order_id, approval_id)
+            return self.broker_router.cancel(
+                mode.value, broker, order_id, approval_id, symbol=symbol
+            )
         finally:
             clear = getattr(adapter, "clear_secret_material", None)
             if clear is not None:
