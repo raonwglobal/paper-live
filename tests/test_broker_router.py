@@ -13,7 +13,7 @@ class FakeBroker:
     def submit(self, request):
         return OrderResult("fake", "1", True)
 
-    def cancel(self, order_id):
+    def cancel(self, order_id, *, symbol=None):
         return True
 
 
