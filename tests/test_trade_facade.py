@@ -23,7 +23,7 @@ class FakeBroker:
         self.last_request = request
         return OrderResult("toss", "ord-1", True, "ok")
 
-    def cancel(self, order_id: str) -> bool:
+    def cancel(self, order_id: str, *, symbol: str | None = None) -> bool:
         self.cancelled.append(order_id)
         return True
 
@@ -71,7 +71,6 @@ def test_submit_paper_path_returns_fill():
 def test_preview_risk_rejection():
     facade, _, _, _ = _facade()
     intent = OrderIntent("005930", "BUY", Decimal("100"), price=Decimal("10000"))
-    # notional 1_000_000 > max 500_000
     preview = facade.preview(intent, Decimal("10000"))
     assert preview.risk.approved is False
     assert preview.risk.level == "REJECT"
@@ -106,7 +105,7 @@ def test_live_submit_requires_approval_and_secret(monkeypatch):
     assert preview.requires_approval is True
 
     with pytest.raises(PermissionError):
-        facade.submit(intent, Decimal("70000"))  # no approval_id
+        facade.submit(intent, Decimal("70000"))
 
     approval = order_gate.approve("operator", order_gate.nonce)
     result = facade.submit(intent, Decimal("70000"), approval_id=approval.approval_id)
@@ -132,7 +131,6 @@ def test_live_submit_denied_without_secret_mapping():
     risk = RiskGuardian(controller, account)
     order_gate = LiveApprovalGate()
     router = BrokerRouter({"toss": FakeBroker()}, approval_gate=order_gate)
-    # empty store → KeyError wrapped path via resolve
     secret_broker = SecretBroker(InMemorySecretStore({}), SecretPolicy(live_secret_ids=frozenset({"toss-order"})))
     facade = InternalTradeFacade(controller, risk, gateway, router, order_gate, secret_broker)
     controller.set_mode(ExecutionEnvironmentMode.REAL_LIVE, token)
