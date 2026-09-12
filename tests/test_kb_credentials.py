@@ -1,9 +1,11 @@
 import json
+from decimal import Decimal
 
 import pytest
 
 from paper_live.brokers.credentials import CredentialParseError, parse_kb_credentials
 from paper_live.brokers.kb import DEFAULT_BUY_ORDER_PATH, KbBrokerAdapter, KbCredentials
+from paper_live.brokers.protocol import BrokerOrderRequest
 
 
 def test_kb_json_credentials_use_verified_buy_endpoint_default() -> None:
@@ -27,8 +29,6 @@ def test_kb_empty_credentials_are_rejected() -> None:
 def test_kb_submit_blocked_when_live_flag_disabled(monkeypatch) -> None:
     monkeypatch.delenv("PAPER_LIVE_ENABLE_LIVE", raising=False)
     adapter = KbBrokerAdapter(KbCredentials("key", "secret"))
-    from decimal import Decimal
-    from paper_live.brokers.protocol import BrokerOrderRequest
 
     with pytest.raises(PermissionError, match="disabled by default"):
         adapter.submit(BrokerOrderRequest("005930", "BUY", Decimal("1"), "limit", Decimal("1000")))
