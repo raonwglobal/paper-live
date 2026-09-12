@@ -143,7 +143,7 @@ class _FakeCancelBroker:
     def submit(self, request: BrokerOrderRequest) -> OrderResult:
         return OrderResult("toss", "ord-http", True, "ok")
 
-    def cancel(self, order_id: str) -> bool:
+    def cancel(self, order_id: str, *, symbol: str | None = None) -> bool:
         self.cancelled.append(order_id)
         return True
 
