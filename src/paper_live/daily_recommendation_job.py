@@ -9,6 +9,7 @@ from .ingestion_pipeline import IngestionPipeline, IngestionPipelineResult
 from .ingestion_run import IngestionRunLedger
 from .market_dataset import DailyDatasetBuilder, DailyPriceProvider
 from .recommendation_pipeline import RecommendationPipeline
+from .run_manifest import RunArtifact, build_run_manifest_v3, persist_run_manifest
 from .universe import SecurityMaster
 
 
@@ -54,44 +55,61 @@ class DailyRecommendationJob:
         selected = [row for row in ranked if bool(row.get("portfolio_selected"))]
         target_weight_sum = sum(float(row.get("target_weight", 0.0)) for row in selected)
         portfolio = self.recommendations.portfolio
-        run_manifest = {
-            "run_id": ingestion.manifest.run_id,
-            "status": ingestion.manifest.status,
-            "ingestion": {
-                "requested_symbols": ingestion.manifest.requested_symbols,
-                "succeeded_symbols": ingestion.manifest.succeeded_symbols,
-                "failed_symbols": ingestion.manifest.failed_symbols,
-                "rows_collected": ingestion.manifest.rows_collected,
-                "dataset_checksum_sha256": ingestion.manifest.dataset_checksum_sha256,
+        portfolio_metadata = {
+            "selected_count": len(selected),
+            "target_weight_sum": round(target_weight_sum, 6),
+            "config": {
+                "max_positions": portfolio.max_positions,
+                "max_positions_per_market": portfolio.max_positions_per_market,
+                "min_score": portfolio.min_score,
+                "min_confidence": portfolio.min_confidence,
+                "max_weight": portfolio.max_weight,
             },
-            "features": {
-                "row_count": feature_manifest.row_count if feature_manifest else 0,
-                "checksum_sha256": feature_manifest.checksum_sha256 if feature_manifest else None,
-            },
-            "candidate_quality": {
-                **self.recommendations.last_filter_stats,
-                "min_history": self.recommendations.min_history,
-                "min_volume": self.recommendations.min_volume,
-                "max_abs_return_1d": self.recommendations.max_abs_return_1d,
-                "max_volatility": self.recommendations.max_volatility,
-            },
-            "recommendations": {
-                "row_count": recommendation_manifest.row_count if recommendation_manifest else 0,
-                "checksum_sha256": recommendation_manifest.checksum_sha256 if recommendation_manifest else None,
-            },
-            "portfolio": {
-                "selected_count": len(selected),
-                "target_weight_sum": round(target_weight_sum, 6),
-                "config": {
-                    "max_positions": portfolio.max_positions,
-                    "max_positions_per_market": portfolio.max_positions_per_market,
-                    "min_score": portfolio.min_score,
-                    "min_confidence": portfolio.min_confidence,
-                    "max_weight": portfolio.max_weight,
-                },
-            },
-            "decision_time": decision_time,
-            "schema_version": "daily-recommendation-job-v2",
         }
-        run_artifact_id = self.storage.write_run_manifest(ingestion.manifest.run_id, run_manifest)
+        manifest = build_run_manifest_v3(
+            run_id=ingestion.manifest.run_id,
+            status=ingestion.manifest.status,
+            decision_time=decision_time,
+            ingestion=RunArtifact(
+                stage="ingestion",
+                artifact_id=ingestion.manifest_artifact_id,
+                dataset=ingestion.manifest.dataset,
+                row_count=ingestion.manifest.rows_collected,
+                checksum_sha256=ingestion.manifest.dataset_checksum_sha256,
+                status=ingestion.manifest.status,
+                metadata={
+                    "requested_symbols": ingestion.manifest.requested_symbols,
+                    "succeeded_symbols": ingestion.manifest.succeeded_symbols,
+                    "failed_symbols": ingestion.manifest.failed_symbols,
+                    "failure_artifact_id": ingestion.failure_artifact_id,
+                },
+            ),
+            features=RunArtifact(
+                stage="features",
+                dataset=feature_manifest.dataset if feature_manifest else None,
+                row_count=feature_manifest.row_count if feature_manifest else 0,
+                checksum_sha256=feature_manifest.checksum_sha256 if feature_manifest else None,
+                status="completed" if feature_manifest else "not_run",
+            ),
+            recommendations=RunArtifact(
+                stage="recommendations",
+                dataset=recommendation_manifest.dataset if recommendation_manifest else None,
+                row_count=recommendation_manifest.row_count if recommendation_manifest else 0,
+                checksum_sha256=recommendation_manifest.checksum_sha256 if recommendation_manifest else None,
+                status="completed" if recommendation_manifest else "not_run",
+                metadata={"candidate_quality": dict(self.recommendations.last_filter_stats)},
+            ),
+            portfolio=RunArtifact(
+                stage="portfolio",
+                row_count=len(selected),
+                status="completed" if ranked else "not_run",
+                metadata=portfolio_metadata,
+            ),
+            risk=RunArtifact(stage="risk", status="not_run"),
+            execution_audit=RunArtifact(stage="execution_audit", status="not_run"),
+            fill=RunArtifact(stage="fill", status="not_run"),
+            pnl=RunArtifact(stage="pnl", status="not_run"),
+            reflection=RunArtifact(stage="reflection", status="not_run"),
+        )
+        run_artifact_id = persist_run_manifest(self.storage, manifest)
         return DailyRecommendationJobResult(ingestion, ranked, feature_manifest, recommendation_manifest, run_artifact_id)
