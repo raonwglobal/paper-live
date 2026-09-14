@@ -28,7 +28,7 @@ __all__ = [
     "OHLCV", "ScreenRule", "sma", "ema", "rsi", "screen", "sharpe_ratio", "max_drawdown", "BacktestResult",
     "BacktestRunner", "EpisodicMemory", "SelfReflectionWorker", "TradeEpisode", "StateGraph", "build_analysis_graph",
     "InternalTradeFacade", "OrderIntent", "OrderPreview", "RiskAssessment", "InternalApiApp", "create_internal_server",
-    "serve_internal_server", "IngestionPipeline", "IngestionPipelineResult", "IngestionRetryService", "RetryReport",
+    "serve_internal_api", "IngestionPipeline", "IngestionPipelineResult", "IngestionRetryService", "RetryReport",
     "FailureQueue", "IngestionFailure", "IngestionRunLedger", "IngestionRunManifest", "RecommendationPipeline",
     "DailyRecommendationJob", "DailyRecommendationJobResult", "RiskGuardian", "RiskLimits", "PortfolioRiskContext",
 ]
