@@ -117,12 +117,19 @@ class RecommendationPipeline:
             row["input_checksum_sha256"] = input_checksum
         feature_manifest = self.storage.write_snapshot(feature_dataset, features, as_of=decision_time,
                                                         schema_version="daily-features-v1")
-        factor_rows = [self._factorize(row) for row in self._latest_candidates(features, decision_time=decision_time)]
+        candidates = self._latest_candidates(features, decision_time=decision_time)
+        factor_rows = [self._factorize(row) for row in candidates]
         ranked = self.feature_service.rank(factor_rows, data_as_of=decision_time)
+        selected_by_symbol = {str(row.get("symbol", "")): row for row in candidates}
         for row in ranked:
             row["decision_time"] = decision_time
             row["dataset_version"] = "recommendation-v1"
             row["input_checksum_sha256"] = input_checksum
+            selected = selected_by_symbol.get(str(row.get("symbol", "")))
+            if selected is not None:
+                row["trade_date"] = selected.get("trade_date")
+                row["market"] = selected.get("market")
+                row["feature_available_at"] = selected.get("available_at")
         recommendation_manifest = self.storage.write_snapshot(recommendation_dataset, ranked, as_of=decision_time,
                                                               schema_version="recommendation-v1")
         return ranked, feature_manifest, recommendation_manifest
