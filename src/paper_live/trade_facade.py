@@ -8,7 +8,7 @@ only through SecretBroker (optionally backed by GoogleDriveSecretStore).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 from typing import Any
 from uuid import uuid4
 
@@ -86,6 +86,46 @@ class InternalTradeFacade:
     currency: str = "KRW"
     _previews: dict[str, OrderPreview] = field(default_factory=dict, init=False, repr=False)
 
+    @staticmethod
+    def intent_from_portfolio_row(
+        row: dict[str, Any],
+        *,
+        account_value: Decimal,
+        current_quantity: Decimal = Decimal("0"),
+        broker: str = "toss",
+        order_type: str = "MARKET",
+        lot_size: Decimal = Decimal("1"),
+    ) -> OrderIntent | None:
+        """Convert a selected portfolio row into a delta-to-target order intent.
+
+        ``target_weight`` is interpreted against account value. Quantity is
+        rounded down to ``lot_size`` so the generated intent never exceeds the
+        requested target notional. A zero delta returns ``None``.
+        """
+        symbol = str(row.get("symbol", "")).strip()
+        if not symbol or account_value <= 0 or current_quantity < 0 or lot_size <= 0:
+            raise ValueError("symbol, account_value, current_quantity and lot_size must be valid")
+        try:
+            weight = Decimal(str(row.get("target_weight", "0")))
+            price = Decimal(str(row.get("close", row.get("price", "0"))))
+        except Exception as exc:
+            raise ValueError("portfolio row has invalid target_weight or price") from exc
+        if weight < 0 or weight > 1 or price <= 0:
+            raise ValueError("target_weight must be in [0, 1] and price must be positive")
+        target_quantity = ((account_value * weight) / price / lot_size).to_integral_value(rounding=ROUND_DOWN) * lot_size
+        delta = target_quantity - current_quantity
+        if delta == 0:
+            return None
+        side = "BUY" if delta > 0 else "SELL"
+        return OrderIntent(
+            symbol=symbol,
+            side=side,
+            quantity=abs(delta),
+            order_type=order_type,
+            price=(price if order_type.strip().upper() == "LIMIT" else None),
+            broker=broker,
+        )
+
     def to_paper_order(self, intent: OrderIntent) -> PaperOrderRequest:
         client_id = intent.client_order_id or f"paper-{uuid4().hex[:16]}"
         return PaperOrderRequest(
@@ -100,9 +140,10 @@ class InternalTradeFacade:
     def to_broker_order(self, intent: OrderIntent) -> BrokerOrderRequest:
         return BrokerOrderRequest(
             symbol=intent.symbol,
-            side=intent.normalized_side().value,  # BUY|SELL
+            side=intent.normalized_side().value,
             quantity=intent.quantity,
-            order_type=intent.normalized_order_type().value,  # MARKET|LIMIT
+            order_type=intent.normalized_order_type().value,
+            price=intent.price,
         )
 
     def _estimate_notional(self, intent: OrderIntent, reference_price: Decimal) -> Decimal:
@@ -162,6 +203,44 @@ class InternalTradeFacade:
             capability=capability,
         )
 
+    def _inject_credentials(self, intent: OrderIntent, *, capability: str = "order.create") -> object:
+        """Resolve secret material and apply when the adapter supports injection.
+
+        Resolve is always required (policy gate). Adapters without
+        apply_secret_material still pass the gate (e.g. test doubles).
+        """
+        material = self._resolve_live_secret(intent, capability=capability)
+        adapter = self._adapter_for(intent.broker)
+        apply = getattr(adapter, "apply_secret_material", None)
+        if apply is not None:
+            apply(material)
+        return adapter
+
+    def _adapter_for(self, broker: str):
+        if self.broker_router is None:
+            raise PermissionError("BrokerRouter is not configured")
+        adapter = self.broker_router.adapters.get(broker)
+        if adapter is None:
+            raise PermissionError(f"broker adapter is not configured: {broker}")
+        return adapter
+
+    def _submit_live(self, intent: OrderIntent, *, approval_id: str | None) -> OrderResult:
+        if self.broker_router is None:
+            raise PermissionError("BrokerRouter is not configured")
+        if self.order_approval_gate is None or approval_id is None:
+            raise PermissionError("explicit live approval_id is required")
+        self.order_approval_gate.require(approval_id)
+        adapter = self._inject_credentials(intent)
+        try:
+            request = self.to_broker_order(intent)
+            return self.broker_router.submit(
+                ExecutionEnvironmentMode.REAL_LIVE.value, intent.broker, request, approval_id
+            )
+        finally:
+            clear = getattr(adapter, "clear_secret_material", None)
+            if clear is not None:
+                clear()
+
     def submit(
         self,
         intent: OrderIntent,
@@ -188,44 +267,6 @@ class InternalTradeFacade:
 
         paper_order = self.to_paper_order(intent)
         return self.gateway.execute(paper_order, reference_price)
-
-    def _adapter_for(self, broker: str):
-        if self.broker_router is None:
-            raise PermissionError("BrokerRouter is not configured")
-        adapter = self.broker_router.adapters.get(broker)
-        if adapter is None:
-            raise PermissionError(f"broker adapter is not configured: {broker}")
-        return adapter
-
-    def _inject_credentials(self, intent: OrderIntent, *, capability: str = "order.create") -> object:
-        """Resolve secret material and apply when the adapter supports injection.
-
-        Resolve is always required (policy gate). Adapters without
-        apply_secret_material still pass the gate (e.g. test doubles).
-        """
-        material = self._resolve_live_secret(intent, capability=capability)
-        adapter = self._adapter_for(intent.broker)
-        apply = getattr(adapter, "apply_secret_material", None)
-        if apply is not None:
-            apply(material)
-        return adapter
-
-    def _submit_live(self, intent: OrderIntent, *, approval_id: str | None) -> OrderResult:
-        if self.broker_router is None:
-            raise PermissionError("BrokerRouter is not configured")
-        if self.order_approval_gate is None or approval_id is None:
-            raise PermissionError("explicit live approval_id is required")
-        self.order_approval_gate.require(approval_id)
-        adapter = self._inject_credentials(intent)
-        try:
-            request = self.to_broker_order(intent)
-            return self.broker_router.submit(
-                ExecutionEnvironmentMode.REAL_LIVE.value, intent.broker, request, approval_id
-            )
-        finally:
-            clear = getattr(adapter, "clear_secret_material", None)
-            if clear is not None:
-                clear()
 
     def cancel(
         self,
