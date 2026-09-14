@@ -22,6 +22,7 @@ def test_daily_job_connects_ingestion_features_and_recommendations(tmp_path):
                      decision_time="2026-08-28T19:00:00+09:00")
     assert result.ingestion.manifest.status == "completed"
     assert result.feature_manifest and result.feature_manifest.row_count == 2
-    assert result.recommendation_manifest and result.recommendation_manifest.row_count == 2
+    assert result.recommendation_manifest and result.recommendation_manifest.row_count == 1
     assert result.ranked[0]["rank"] == 1
+    assert result.ranked[0]["trade_date"] == "2026-08-28"
     assert result.run_artifact_id
