@@ -1,4 +1,5 @@
 from datetime import date
+import json
 
 from paper_live.daily_recommendation_job import DailyRecommendationJob
 from paper_live.data_lake import GoogleDriveStorageAgent, LocalDriveMirror
@@ -26,3 +27,10 @@ def test_daily_job_connects_ingestion_features_and_recommendations(tmp_path):
     assert result.ranked[0]["rank"] == 1
     assert result.ranked[0]["trade_date"] == "2026-08-28"
     assert result.run_artifact_id
+
+    manifest = json.loads((tmp_path / "datasets" / "runs" / result.run_artifact_id).read_text())
+    assert manifest["schema_version"] == "daily-recommendation-job-v2"
+    assert "candidate_quality" in manifest
+    assert manifest["portfolio"]["selected_count"] == 1
+    assert manifest["portfolio"]["config"]["max_positions"] == 10
+    assert manifest["portfolio"]["target_weight_sum"] > 0
