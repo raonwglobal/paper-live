@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha256
 from math import isfinite
@@ -13,14 +14,32 @@ from .features import DailyFeatureEngine
 from .recommendation import StockRecommendationAgent
 
 
+@dataclass(frozen=True)
+class PortfolioConfig:
+    max_positions: int = 10
+    max_positions_per_market: int = 5
+    min_score: float = 55.0
+    min_confidence: float = 40.0
+    max_weight: float = 0.25
+
+    def __post_init__(self) -> None:
+        if self.max_positions < 1 or self.max_positions_per_market < 1:
+            raise ValueError("portfolio position limits must be positive")
+        if not 0 <= self.min_score <= 100 or not 0 <= self.min_confidence <= 100:
+            raise ValueError("portfolio score thresholds must be between 0 and 100")
+        if not 0 < self.max_weight <= 1:
+            raise ValueError("portfolio max_weight must be in (0, 1]")
+
+
 class RecommendationPipeline:
-    """Build and persist deterministic, point-in-time feature/recommendation snapshots."""
+    """Build deterministic PIT features, recommendations, and a diversified portfolio."""
 
     def __init__(self, agent: StockRecommendationAgent | None = None,
                  storage: GoogleDriveStorageAgent | None = None,
                  feature_engine: DailyFeatureEngine | None = None,
                  *, min_history: int = 2, min_volume: float = 1.0,
-                 max_abs_return_1d: float = 0.50, max_volatility: float = 0.20):
+                 max_abs_return_1d: float = 0.50, max_volatility: float = 0.20,
+                 portfolio: PortfolioConfig | None = None):
         if storage is None:
             raise ValueError("storage is required")
         if min_history < 1 or min_volume < 0 or max_abs_return_1d <= 0 or max_volatility <= 0:
@@ -33,6 +52,7 @@ class RecommendationPipeline:
         self.min_volume = min_volume
         self.max_abs_return_1d = max_abs_return_1d
         self.max_volatility = max_volatility
+        self.portfolio = portfolio or PortfolioConfig()
         self.last_filter_stats: dict[str, int] = {
             "pit_eligible": 0, "latest_candidates": 0, "selected_candidates": 0,
             "filtered_history": 0, "filtered_volume": 0, "filtered_return": 0,
@@ -67,25 +87,18 @@ class RecommendationPipeline:
 
     @classmethod
     def _latest_candidates(cls, rows: Sequence[dict[str, Any]], *, decision_time: str) -> list[dict[str, Any]]:
-        """Keep one latest PIT-eligible feature row per market/symbol."""
         latest: dict[tuple[str, str], dict[str, Any]] = {}
         for row in rows:
             if not cls._is_point_in_time(row, decision_time):
                 continue
-            symbol = str(row.get("symbol", ""))
+            symbol = str(row.get("symbol", "")).strip()
             if not symbol:
                 continue
             key = (str(row.get("market", "")), symbol)
             current = latest.get(key)
-            if current is None or (
-                str(row.get("trade_date", "")), str(row.get("available_at", ""))
-            ) > (
-                str(current.get("trade_date", "")), str(current.get("available_at", ""))
-            ):
+            if current is None or (str(row.get("trade_date", "")), str(row.get("available_at", ""))) > (str(current.get("trade_date", "")), str(current.get("available_at", ""))):
                 latest[key] = row
-        return sorted(latest.values(), key=lambda r: (
-            str(r.get("market", "")), str(r.get("symbol", "")), str(r.get("trade_date", ""))
-        ))
+        return sorted(latest.values(), key=lambda r: (str(r.get("market", "")), str(r.get("symbol", "")), str(r.get("trade_date", ""))))
 
     @classmethod
     def _history_counts(cls, rows: Sequence[dict[str, Any]], *, decision_time: str) -> dict[tuple[str, str], int]:
@@ -94,49 +107,48 @@ class RecommendationPipeline:
             if not cls._is_point_in_time(row, decision_time):
                 continue
             symbol = str(row.get("symbol", "")).strip()
-            if not symbol:
-                continue
-            key = (str(row.get("market", "")), symbol)
-            counts[key] = counts.get(key, 0) + 1
+            if symbol:
+                key = (str(row.get("market", "")), symbol)
+                counts[key] = counts.get(key, 0) + 1
         return counts
 
     def _filter_candidates(self, candidates: Sequence[dict[str, Any]], *, history_counts: dict[tuple[str, str], int]) -> list[dict[str, Any]]:
         selected: list[dict[str, Any]] = []
-        stats = {"filtered_history": 0, "filtered_volume": 0, "filtered_return": 0,
-                 "filtered_volatility": 0, "filtered_ohlc": 0}
+        stats = {"filtered_history": 0, "filtered_volume": 0, "filtered_return": 0, "filtered_volatility": 0, "filtered_ohlc": 0}
         for row in candidates:
             key = (str(row.get("market", "")), str(row.get("symbol", "")))
             if history_counts.get(key, 0) < self.min_history:
                 stats["filtered_history"] += 1
                 continue
-            volume = row.get("volume")
             try:
-                volume_value = float(volume)
+                volume_value = float(row.get("volume"))
             except (TypeError, ValueError):
                 volume_value = 0.0
             if not isfinite(volume_value) or volume_value < self.min_volume:
                 stats["filtered_volume"] += 1
                 continue
-            return_1d = row.get("return_1d")
-            if return_1d is not None:
+            if row.get("return_1d") is not None:
                 try:
-                    return_value = float(return_1d)
+                    return_value = float(row["return_1d"])
                 except (TypeError, ValueError):
                     return_value = float("inf")
                 if not isfinite(return_value) or abs(return_value) > self.max_abs_return_1d:
                     stats["filtered_return"] += 1
                     continue
-            volatility = row.get("volatility")
-            if volatility is not None:
+            if row.get("volatility") is not None:
                 try:
-                    volatility_value = float(volatility)
+                    volatility_value = float(row["volatility"])
                 except (TypeError, ValueError):
                     volatility_value = float("inf")
                 if not isfinite(volatility_value) or volatility_value > self.max_volatility:
                     stats["filtered_volatility"] += 1
                     continue
-            numeric = {key: row.get(key) for key in ("open", "high", "low", "close")}
-            if any(value is not None and not isfinite(float(value)) for value in numeric.values()):
+            try:
+                numeric = {key: (None if row.get(key) is None else float(row[key])) for key in ("open", "high", "low", "close")}
+            except (TypeError, ValueError):
+                stats["filtered_ohlc"] += 1
+                continue
+            if any(value is not None and not isfinite(value) for value in numeric.values()):
                 stats["filtered_ohlc"] += 1
                 continue
             open_value, high_value, low_value, close_value = (numeric[key] for key in ("open", "high", "low", "close"))
@@ -148,6 +160,46 @@ class RecommendationPipeline:
         self.last_filter_stats["selected_candidates"] = len(selected)
         return selected
 
+    def construct_portfolio(self, ranked: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Select and weight candidates with market caps and inverse-volatility sizing."""
+        eligible = [row for row in ranked if float(row.get("score", 0)) >= self.portfolio.min_score and float(row.get("confidence", 0)) >= self.portfolio.min_confidence]
+        selected: list[dict[str, Any]] = []
+        market_counts: dict[str, int] = {}
+        for row in eligible:
+            market = str(row.get("market", ""))
+            if market_counts.get(market, 0) >= self.portfolio.max_positions_per_market:
+                continue
+            selected.append(dict(row))
+            market_counts[market] = market_counts.get(market, 0) + 1
+            if len(selected) >= self.portfolio.max_positions:
+                break
+        raw_weights: list[float] = []
+        for row in selected:
+            try:
+                volatility = float(row.get("volatility", 0))
+            except (TypeError, ValueError):
+                volatility = 0.0
+            raw_weights.append(1.0 / max(volatility, 0.01))
+        total = sum(raw_weights)
+        weights = [value / total for value in raw_weights] if total else []
+        for row, weight, position in zip(selected, weights, range(1, len(selected) + 1)):
+            row["portfolio_selected"] = True
+            row["portfolio_rank"] = position
+            row["target_weight"] = round(min(weight, self.portfolio.max_weight), 6)
+        # If a cap was active, redistribute only among capped positions deterministically.
+        capped_total = sum(row["target_weight"] for row in selected)
+        if selected and capped_total < 1.0:
+            room = 1.0 - capped_total
+            uncapped = [row for row in selected if row["target_weight"] < self.portfolio.max_weight]
+            for row in uncapped:
+                row["target_weight"] = round(min(self.portfolio.max_weight, row["target_weight"] + room / len(uncapped)), 6)
+        for row in ranked:
+            if not any(row.get("symbol") == item.get("symbol") and row.get("market", "") == item.get("market", "") for item in selected):
+                row["portfolio_selected"] = False
+                row["portfolio_rank"] = None
+                row["target_weight"] = 0.0
+        return [dict(row) for row in ranked]
+
     @staticmethod
     def _bounded_score(value: Any, scale: float = 1.0, *, inverse: bool = False) -> float:
         try:
@@ -155,11 +207,9 @@ class RecommendationPipeline:
         except (TypeError, ValueError):
             return 50.0
         direction = -1.0 if inverse else 1.0
-        score = 50.0 + 50.0 * number * scale * direction
-        return round(max(0.0, min(100.0, score)), 4)
+        return round(max(0.0, min(100.0, 50.0 + 50.0 * number * scale * direction)), 4)
 
     def _factorize(self, row: dict[str, Any]) -> dict[str, Any]:
-        """Project normalized daily features into stable 0..100 recommendation factors."""
         result = dict(row)
         result.setdefault("fundamental_score", 50.0)
         result.setdefault("value_score", 50.0)
@@ -170,8 +220,7 @@ class RecommendationPipeline:
         result["risk_score"] = self._bounded_score(result.get("volatility"), inverse=True)
         return result
 
-    def run(self, feature_rows: Sequence[dict[str, Any]], *, data_as_of: str,
-            dataset: str = "recommendations/daily") -> tuple[list[dict[str, Any]], DatasetManifest]:
+    def run(self, feature_rows: Sequence[dict[str, Any]], *, data_as_of: str, dataset: str = "recommendations/daily") -> tuple[list[dict[str, Any]], DatasetManifest]:
         ranked = self.agent.rank(feature_rows, data_as_of=data_as_of)
         input_checksum = self._checksum(feature_rows)
         for row in ranked:
@@ -181,23 +230,14 @@ class RecommendationPipeline:
         manifest = self.storage.write_jsonl(dataset, ranked, as_of=data_as_of, schema_version="recommendation-v1")
         return ranked, manifest
 
-    def build_from_daily(self, daily_rows: Sequence[dict[str, Any]], *, decision_time: str,
-                         feature_dataset: str = "features/daily",
-                         recommendation_dataset: str = "recommendations/daily") -> tuple[list[dict[str, Any]], DatasetManifest, DatasetManifest]:
-        ordered = sorted((dict(row) for row in daily_rows),
-                         key=lambda r: (str(r.get("market", "")), str(r.get("symbol", "")), str(r.get("trade_date", ""))))
+    def build_from_daily(self, daily_rows: Sequence[dict[str, Any]], *, decision_time: str, feature_dataset: str = "features/daily", recommendation_dataset: str = "recommendations/daily") -> tuple[list[dict[str, Any]], DatasetManifest, DatasetManifest]:
+        ordered = sorted((dict(row) for row in daily_rows), key=lambda r: (str(r.get("market", "")), str(r.get("symbol", "")), str(r.get("trade_date", ""))))
         input_checksum = self._checksum(ordered)
         features = self.feature_engine.build(ordered, decision_time=decision_time)
         for row in features:
             row["input_checksum_sha256"] = input_checksum
-        feature_manifest = self.storage.write_snapshot(feature_dataset, features, as_of=decision_time,
-                                                        schema_version="daily-features-v1")
-        self.last_filter_stats = {
-            "pit_eligible": sum(self._is_point_in_time(row, decision_time) for row in features),
-            "latest_candidates": 0, "selected_candidates": 0,
-            "filtered_history": 0, "filtered_volume": 0, "filtered_return": 0,
-            "filtered_volatility": 0, "filtered_ohlc": 0,
-        }
+        feature_manifest = self.storage.write_snapshot(feature_dataset, features, as_of=decision_time, schema_version="daily-features-v1")
+        self.last_filter_stats = {"pit_eligible": sum(self._is_point_in_time(row, decision_time) for row in features), "latest_candidates": 0, "selected_candidates": 0, "filtered_history": 0, "filtered_volume": 0, "filtered_return": 0, "filtered_volatility": 0, "filtered_ohlc": 0}
         candidates = self._latest_candidates(features, decision_time=decision_time)
         self.last_filter_stats["latest_candidates"] = len(candidates)
         history_counts = self._history_counts(features, decision_time=decision_time)
@@ -213,6 +253,7 @@ class RecommendationPipeline:
                 row["trade_date"] = selected.get("trade_date")
                 row["market"] = selected.get("market")
                 row["feature_available_at"] = selected.get("available_at")
-        recommendation_manifest = self.storage.write_snapshot(recommendation_dataset, ranked, as_of=decision_time,
-                                                              schema_version="recommendation-v1")
+                row["volatility"] = selected.get("volatility")
+        ranked = self.construct_portfolio(ranked)
+        recommendation_manifest = self.storage.write_snapshot(recommendation_dataset, ranked, as_of=decision_time, schema_version="recommendation-v1")
         return ranked, feature_manifest, recommendation_manifest
