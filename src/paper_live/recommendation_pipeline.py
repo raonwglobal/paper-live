@@ -53,11 +53,7 @@ class RecommendationPipeline:
         self.max_abs_return_1d = max_abs_return_1d
         self.max_volatility = max_volatility
         self.portfolio = portfolio or PortfolioConfig()
-        self.last_filter_stats: dict[str, int] = {
-            "pit_eligible": 0, "latest_candidates": 0, "selected_candidates": 0,
-            "filtered_history": 0, "filtered_volume": 0, "filtered_return": 0,
-            "filtered_volatility": 0, "filtered_ohlc": 0,
-        }
+        self.last_filter_stats: dict[str, int] = {"pit_eligible": 0, "latest_candidates": 0, "selected_candidates": 0, "filtered_history": 0, "filtered_volume": 0, "filtered_return": 0, "filtered_volatility": 0, "filtered_ohlc": 0}
 
     @staticmethod
     def _checksum(rows: Sequence[dict[str, Any]]) -> str:
@@ -160,44 +156,40 @@ class RecommendationPipeline:
         self.last_filter_stats["selected_candidates"] = len(selected)
         return selected
 
+    @staticmethod
+    def _number(value: Any, default: float = 0.0) -> float:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return default
+        return number if isfinite(number) else default
+
     def construct_portfolio(self, ranked: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
         """Select and weight candidates with market caps and inverse-volatility sizing."""
-        eligible = [row for row in ranked if float(row.get("score", 0)) >= self.portfolio.min_score and float(row.get("confidence", 0)) >= self.portfolio.min_confidence]
+        for row in ranked:
+            row["portfolio_selected"] = False
+            row["portfolio_rank"] = None
+            row["target_weight"] = 0.0
+        eligible = [row for row in ranked if self._number(row.get("score")) >= self.portfolio.min_score and self._number(row.get("confidence")) >= self.portfolio.min_confidence]
         selected: list[dict[str, Any]] = []
         market_counts: dict[str, int] = {}
         for row in eligible:
             market = str(row.get("market", ""))
             if market_counts.get(market, 0) >= self.portfolio.max_positions_per_market:
                 continue
-            selected.append(dict(row))
+            selected.append(row)
             market_counts[market] = market_counts.get(market, 0) + 1
             if len(selected) >= self.portfolio.max_positions:
                 break
-        raw_weights: list[float] = []
-        for row in selected:
-            try:
-                volatility = float(row.get("volatility", 0))
-            except (TypeError, ValueError):
-                volatility = 0.0
-            raw_weights.append(1.0 / max(volatility, 0.01))
+        raw_weights = [1.0 / max(self._number(row.get("volatility"), 0.01), 0.01) for row in selected]
         total = sum(raw_weights)
-        weights = [value / total for value in raw_weights] if total else []
+        if not total:
+            return [dict(row) for row in ranked]
+        weights = [value / total for value in raw_weights]
         for row, weight, position in zip(selected, weights, range(1, len(selected) + 1)):
             row["portfolio_selected"] = True
             row["portfolio_rank"] = position
             row["target_weight"] = round(min(weight, self.portfolio.max_weight), 6)
-        # If a cap was active, redistribute only among capped positions deterministically.
-        capped_total = sum(row["target_weight"] for row in selected)
-        if selected and capped_total < 1.0:
-            room = 1.0 - capped_total
-            uncapped = [row for row in selected if row["target_weight"] < self.portfolio.max_weight]
-            for row in uncapped:
-                row["target_weight"] = round(min(self.portfolio.max_weight, row["target_weight"] + room / len(uncapped)), 6)
-        for row in ranked:
-            if not any(row.get("symbol") == item.get("symbol") and row.get("market", "") == item.get("market", "") for item in selected):
-                row["portfolio_selected"] = False
-                row["portfolio_rank"] = None
-                row["target_weight"] = 0.0
         return [dict(row) for row in ranked]
 
     @staticmethod
