@@ -67,6 +67,13 @@ class DailyRecommendationJob:
                 "row_count": feature_manifest.row_count if feature_manifest else 0,
                 "checksum_sha256": feature_manifest.checksum_sha256 if feature_manifest else None,
             },
+            "candidate_quality": {
+                **self.recommendations.last_filter_stats,
+                "min_history": self.recommendations.min_history,
+                "min_volume": self.recommendations.min_volume,
+                "max_abs_return_1d": self.recommendations.max_abs_return_1d,
+                "max_volatility": self.recommendations.max_volatility,
+            },
             "recommendations": {
                 "row_count": recommendation_manifest.row_count if recommendation_manifest else 0,
                 "checksum_sha256": recommendation_manifest.checksum_sha256 if recommendation_manifest else None,
