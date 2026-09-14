@@ -105,67 +105,22 @@ class InternalTradeFacade:
         if delta == 0:
             return None
         normalized_type = order_type.strip().upper()
-        return OrderIntent(
-            symbol=symbol,
-            side="BUY" if delta > 0 else "SELL",
-            quantity=abs(delta),
-            order_type=order_type,
-            price=(price if normalized_type == "LIMIT" else None),
-            broker=broker,
-        )
+        return OrderIntent(symbol=symbol, side="BUY" if delta > 0 else "SELL", quantity=abs(delta), order_type=order_type, price=(price if normalized_type == "LIMIT" else None), broker=broker)
 
-    def build_portfolio_risk_context(
-        self,
-        account: PaperAccount,
-        prices: Mapping[str, Decimal],
-        *,
-        markets: Mapping[str, str] | None = None,
-        target_symbol: str | None = None,
-    ) -> PortfolioRiskSnapshot:
+    def build_portfolio_risk_context(self, account: PaperAccount, prices: Mapping[str, Decimal], *, markets: Mapping[str, str] | None = None, target_symbol: str | None = None) -> PortfolioRiskSnapshot:
         return self.portfolio_risk_builder.build(account, prices, markets=markets, target_symbol=target_symbol)
 
-    def preview_portfolio_row(
-        self,
-        row: dict[str, Any],
-        *,
-        account: PaperAccount,
-        prices: Mapping[str, Decimal],
-        markets: Mapping[str, str] | None = None,
-        broker: str = "toss",
-        order_type: str = "MARKET",
-        lot_size: Decimal = Decimal("1"),
-    ) -> OrderPreview | None:
+    def preview_portfolio_row(self, row: dict[str, Any], *, account: PaperAccount, prices: Mapping[str, Decimal], markets: Mapping[str, str] | None = None, broker: str = "toss", order_type: str = "MARKET", lot_size: Decimal = Decimal("1")) -> OrderPreview | None:
         symbol = str(row.get("symbol", "")).strip()
         snapshot = self.build_portfolio_risk_context(account, prices, markets=markets, target_symbol=symbol)
-        intent = self.intent_from_portfolio_row(
-            row,
-            account_value=snapshot.context.account_value,
-            current_quantity=account.positions.get(symbol, Decimal("0")),
-            broker=broker,
-            order_type=order_type,
-            lot_size=lot_size,
-        )
+        intent = self.intent_from_portfolio_row(row, account_value=snapshot.context.account_value, current_quantity=account.positions.get(symbol, Decimal("0")), broker=broker, order_type=order_type, lot_size=lot_size)
         if intent is None:
             return None
         reference_price = Decimal(str(prices.get(intent.symbol, "0")))
         return self.preview(intent, reference_price, portfolio_context=snapshot.context)
 
-    def revalidate_portfolio_row(
-        self,
-        row: dict[str, Any],
-        *,
-        account: PaperAccount,
-        latest_prices: Mapping[str, Decimal],
-        markets: Mapping[str, str] | None = None,
-        broker: str = "toss",
-        order_type: str = "MARKET",
-        lot_size: Decimal = Decimal("1"),
-    ) -> PortfolioRevalidation:
-        """Rebuild intent and risk approval from the latest account/market state.
-
-        Recommendation-time prices are never used for final sizing. A missing or
-        non-positive latest price for the target symbol fails closed.
-        """
+    def revalidate_portfolio_row(self, row: dict[str, Any], *, account: PaperAccount, latest_prices: Mapping[str, Decimal], markets: Mapping[str, str] | None = None, broker: str = "toss", order_type: str = "MARKET", lot_size: Decimal = Decimal("1")) -> PortfolioRevalidation:
+        """Rebuild intent and risk approval from the latest account/market state."""
         symbol = str(row.get("symbol", "")).strip()
         if not symbol:
             raise ValueError("portfolio row symbol is required")
@@ -175,33 +130,23 @@ class InternalTradeFacade:
         latest_price = Decimal(str(raw_latest))
         if latest_price <= 0:
             raise ValueError(f"latest price must be positive: {symbol}")
-
-        # Rebuild all held-position exposure first, so stale cash/positions cannot
-        # survive from recommendation time into the final risk decision.
-        snapshot = self.build_portfolio_risk_context(
-            account,
-            latest_prices,
-            markets=markets,
-            target_symbol=symbol,
-        )
+        snapshot = self.build_portfolio_risk_context(account, latest_prices, markets=markets, target_symbol=symbol)
         latest_row = dict(row)
         latest_row["close"] = str(latest_price)
-        intent = self.intent_from_portfolio_row(
-            latest_row,
-            account_value=snapshot.context.account_value,
-            current_quantity=account.positions.get(symbol, Decimal("0")),
-            broker=broker,
-            order_type=order_type,
-            lot_size=lot_size,
-        )
+        intent = self.intent_from_portfolio_row(latest_row, account_value=snapshot.context.account_value, current_quantity=account.positions.get(symbol, Decimal("0")), broker=broker, order_type=order_type, lot_size=lot_size)
         if intent is None:
             return PortfolioRevalidation(snapshot=snapshot, intent=None, preview=None)
-
-        # LIMIT orders also use the latest price rather than the recommendation
-        # snapshot. MARKET orders intentionally retain no explicit limit price.
-        reference_price = latest_price
-        preview = self.preview(intent, reference_price, portfolio_context=snapshot.context)
+        preview = self.preview(intent, latest_price, portfolio_context=snapshot.context)
         return PortfolioRevalidation(snapshot=snapshot, intent=intent, preview=preview)
+
+    def submit_portfolio_row_revalidated(self, row: dict[str, Any], *, account: PaperAccount, latest_prices: Mapping[str, Decimal], markets: Mapping[str, str] | None = None, broker: str = "toss", order_type: str = "MARKET", lot_size: Decimal = Decimal("1"), approval_id: str | None = None) -> Fill | OrderResult | None:
+        """Revalidate immediately before submission; never reuse a stale preview."""
+        result = self.revalidate_portfolio_row(row, account=account, latest_prices=latest_prices, markets=markets, broker=broker, order_type=order_type, lot_size=lot_size)
+        if result.intent is None:
+            return None
+        # The same latest-state context is passed into the final risk gate. A
+        # preview_id is intentionally not accepted on this path.
+        return self.submit(result.intent, latest_prices[result.intent.symbol], approval_id=approval_id, portfolio_context=result.snapshot.context)
 
     def to_paper_order(self, intent: OrderIntent) -> PaperOrderRequest:
         client_id = intent.client_order_id or f"paper-{uuid4().hex[:16]}"
