@@ -14,7 +14,7 @@ class Provider:
         ]
 
 
-def test_daily_job_connects_ingestion_features_and_recommendations(tmp_path):
+def test_daily_job_connects_ingestion_features_recommendations_and_manifest_lineage(tmp_path):
     storage = GoogleDriveStorageAgent(LocalDriveMirror(tmp_path), folder_id="datasets")
     universe = SecurityMaster([Security("000001", "A", "KRX")])
     job = DailyRecommendationJob(universe, lambda market: Provider(), storage,
@@ -29,8 +29,14 @@ def test_daily_job_connects_ingestion_features_and_recommendations(tmp_path):
     assert result.run_artifact_id
 
     manifest = json.loads((tmp_path / "datasets" / "runs" / result.run_artifact_id).read_text())
-    assert manifest["schema_version"] == "daily-recommendation-job-v2"
-    assert "candidate_quality" in manifest
-    assert manifest["portfolio"]["selected_count"] == 1
-    assert manifest["portfolio"]["config"]["max_positions"] == 10
-    assert manifest["portfolio"]["target_weight_sum"] > 0
+    assert manifest["schema_version"] == "paper-live-run-v3"
+    assert [stage["stage"] for stage in manifest["stages"]] == [
+        "ingestion", "features", "recommendations", "portfolio", "risk",
+        "execution_audit", "fill", "pnl", "reflection",
+    ]
+    assert manifest["stages"][0]["checksum_sha256"]
+    assert manifest["stages"][1]["checksum_sha256"]
+    assert manifest["stages"][2]["checksum_sha256"]
+    assert manifest["stages"][3]["metadata"]["selected_count"] == 1
+    assert manifest["stages"][3]["metadata"]["config"]["max_positions"] == 10
+    assert manifest["stages"][3]["metadata"]["target_weight_sum"] > 0
