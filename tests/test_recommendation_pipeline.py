@@ -1,6 +1,6 @@
 from paper_live.data_lake import GoogleDriveStorageAgent, LocalDriveMirror
 from paper_live.recommendation import StockRecommendationAgent
-from paper_live.recommendation_pipeline import RecommendationPipeline
+from paper_live.recommendation_pipeline import PortfolioConfig, RecommendationPipeline
 
 
 def test_pipeline_ranks_and_persists(tmp_path):
@@ -21,20 +21,13 @@ def test_build_from_daily_uses_latest_pit_row_per_symbol(tmp_path):
     storage = GoogleDriveStorageAgent(LocalDriveMirror(tmp_path), folder_id="datasets")
     pipeline = RecommendationPipeline(storage=storage)
     rows = [
-        {"market": "KRX", "symbol": "A", "trade_date": "2026-08-27", "close": 100, "volume": 100,
-         "available_at": "2026-08-27T18:00:00+09:00"},
-        {"market": "KRX", "symbol": "A", "trade_date": "2026-08-28", "close": 110, "volume": 120,
-         "available_at": "2026-08-28T18:00:00+09:00"},
-        {"market": "KRX", "symbol": "A", "trade_date": "2026-08-29", "close": 130, "volume": 150,
-         "available_at": "2026-08-29T18:00:00+09:00"},
-        {"market": "KRX", "symbol": "B", "trade_date": "2026-08-27", "close": 80, "volume": 70,
-         "available_at": "2026-08-27T18:00:00+09:00"},
-        {"market": "KRX", "symbol": "B", "trade_date": "2026-08-28", "close": 90, "volume": 80,
-         "available_at": "2026-08-28T18:30:00+09:00"},
+        {"market": "KRX", "symbol": "A", "trade_date": "2026-08-27", "close": 100, "volume": 100, "available_at": "2026-08-27T18:00:00+09:00"},
+        {"market": "KRX", "symbol": "A", "trade_date": "2026-08-28", "close": 110, "volume": 120, "available_at": "2026-08-28T18:00:00+09:00"},
+        {"market": "KRX", "symbol": "A", "trade_date": "2026-08-29", "close": 130, "volume": 150, "available_at": "2026-08-29T18:00:00+09:00"},
+        {"market": "KRX", "symbol": "B", "trade_date": "2026-08-27", "close": 80, "volume": 70, "available_at": "2026-08-27T18:00:00+09:00"},
+        {"market": "KRX", "symbol": "B", "trade_date": "2026-08-28", "close": 90, "volume": 80, "available_at": "2026-08-28T18:30:00+09:00"},
     ]
-    ranked, feature_manifest, recommendation_manifest = pipeline.build_from_daily(
-        rows, decision_time="2026-08-28T19:00:00+09:00"
-    )
+    ranked, feature_manifest, recommendation_manifest = pipeline.build_from_daily(rows, decision_time="2026-08-28T19:00:00+09:00")
     assert feature_manifest.row_count == 4
     assert recommendation_manifest.row_count == 2
     assert {item["symbol"] for item in ranked} == {"A", "B"}
@@ -46,20 +39,13 @@ def test_quality_filters_remove_insufficient_and_invalid_candidates(tmp_path):
     storage = GoogleDriveStorageAgent(LocalDriveMirror(tmp_path), folder_id="datasets")
     pipeline = RecommendationPipeline(storage=storage, min_history=2, max_abs_return_1d=0.20)
     rows = [
-        {"market": "KRX", "symbol": "GOOD", "trade_date": "2026-08-27", "open": 99, "high": 101, "low": 98, "close": 100, "volume": 100,
-         "available_at": "2026-08-27T18:00:00+09:00"},
-        {"market": "KRX", "symbol": "GOOD", "trade_date": "2026-08-28", "open": 109, "high": 111, "low": 108, "close": 110, "volume": 120,
-         "available_at": "2026-08-28T18:00:00+09:00"},
-        {"market": "KRX", "symbol": "SHORT", "trade_date": "2026-08-28", "close": 90, "volume": 100,
-         "available_at": "2026-08-28T18:00:00+09:00"},
-        {"market": "KRX", "symbol": "ZERO", "trade_date": "2026-08-27", "close": 100, "volume": 0,
-         "available_at": "2026-08-27T18:00:00+09:00"},
-        {"market": "KRX", "symbol": "ZERO", "trade_date": "2026-08-28", "close": 100, "volume": 0,
-         "available_at": "2026-08-28T18:00:00+09:00"},
-        {"market": "KRX", "symbol": "JUMP", "trade_date": "2026-08-27", "close": 100, "volume": 100,
-         "available_at": "2026-08-27T18:00:00+09:00"},
-        {"market": "KRX", "symbol": "JUMP", "trade_date": "2026-08-28", "close": 140, "volume": 100,
-         "available_at": "2026-08-28T18:00:00+09:00"},
+        {"market": "KRX", "symbol": "GOOD", "trade_date": "2026-08-27", "open": 99, "high": 101, "low": 98, "close": 100, "volume": 100, "available_at": "2026-08-27T18:00:00+09:00"},
+        {"market": "KRX", "symbol": "GOOD", "trade_date": "2026-08-28", "open": 109, "high": 111, "low": 108, "close": 110, "volume": 120, "available_at": "2026-08-28T18:00:00+09:00"},
+        {"market": "KRX", "symbol": "SHORT", "trade_date": "2026-08-28", "close": 90, "volume": 100, "available_at": "2026-08-28T18:00:00+09:00"},
+        {"market": "KRX", "symbol": "ZERO", "trade_date": "2026-08-27", "close": 100, "volume": 0, "available_at": "2026-08-27T18:00:00+09:00"},
+        {"market": "KRX", "symbol": "ZERO", "trade_date": "2026-08-28", "close": 100, "volume": 0, "available_at": "2026-08-28T18:00:00+09:00"},
+        {"market": "KRX", "symbol": "JUMP", "trade_date": "2026-08-27", "close": 100, "volume": 100, "available_at": "2026-08-27T18:00:00+09:00"},
+        {"market": "KRX", "symbol": "JUMP", "trade_date": "2026-08-28", "close": 140, "volume": 100, "available_at": "2026-08-28T18:00:00+09:00"},
     ]
     ranked, _, _ = pipeline.build_from_daily(rows, decision_time="2026-08-28T19:00:00+09:00")
     assert [row["symbol"] for row in ranked] == ["GOOD"]
@@ -67,6 +53,23 @@ def test_quality_filters_remove_insufficient_and_invalid_candidates(tmp_path):
     assert pipeline.last_filter_stats["filtered_volume"] == 1
     assert pipeline.last_filter_stats["filtered_return"] == 1
     assert pipeline.last_filter_stats["selected_candidates"] == 1
+
+
+def test_construct_portfolio_applies_position_market_and_weight_caps(tmp_path):
+    storage = GoogleDriveStorageAgent(LocalDriveMirror(tmp_path), folder_id="datasets")
+    pipeline = RecommendationPipeline(storage=storage, portfolio=PortfolioConfig(max_positions=3, max_positions_per_market=1, max_weight=0.60))
+    ranked = [
+        {"symbol": "A", "market": "KRX", "score": 90, "confidence": 90, "volatility": 0.10},
+        {"symbol": "B", "market": "KRX", "score": 89, "confidence": 90, "volatility": 0.20},
+        {"symbol": "C", "market": "NASDAQ", "score": 88, "confidence": 90, "volatility": 0.20},
+        {"symbol": "D", "market": "NYSE", "score": 87, "confidence": 90, "volatility": 0.20},
+    ]
+    result = pipeline.construct_portfolio(ranked)
+    selected = [row for row in result if row["portfolio_selected"]]
+    assert [row["symbol"] for row in selected] == ["A", "C", "D"]
+    assert all(row["target_weight"] <= 0.60 for row in selected)
+    assert sum(row["target_weight"] for row in selected) <= 1.0
+    assert result[1]["target_weight"] == 0.0
 
 
 def test_factor_scores_preserve_normalized_daily_ranges(tmp_path):
