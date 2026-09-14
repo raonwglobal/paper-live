@@ -12,14 +12,14 @@ from .portfolio_risk import PortfolioRiskContextBuilder, PortfolioRiskSnapshot, 
 from .recommendation_pipeline import RecommendationPipeline
 from .reflection import EpisodicMemory, SelfReflectionWorker, TradeEpisode
 from .risk import PortfolioRiskContext, RiskGuardian, RiskLimits
-from .trade_facade import InternalTradeFacade, OrderIntent, OrderPreview, RiskAssessment
+from .trade_facade import InternalTradeFacade, OrderIntent, OrderPreview, PortfolioRevalidation, RiskAssessment
 
 __all__ = [
     "EnvironmentController", "EnvironmentTransitionError", "ExecutionEnvironmentMode", "ExecutionGateway", "Fill",
     "PaperOrderRequest", "OrderRequest", "OrderSide", "OrderType", "PaperAccount", "VirtualMatchingEngine",
     "OHLCV", "ScreenRule", "sma", "ema", "rsi", "screen", "sharpe_ratio", "max_drawdown", "BacktestResult",
     "BacktestRunner", "EpisodicMemory", "SelfReflectionWorker", "TradeEpisode", "StateGraph", "build_analysis_graph",
-    "InternalTradeFacade", "OrderIntent", "OrderPreview", "RiskAssessment", "InternalApiApp", "create_internal_server",
+    "InternalTradeFacade", "OrderIntent", "OrderPreview", "PortfolioRevalidation", "RiskAssessment", "InternalApiApp", "create_internal_server",
     "serve_internal_api", "IngestionPipeline", "IngestionPipelineResult", "IngestionRetryService", "RetryReport",
     "FailureQueue", "IngestionFailure", "IngestionRunLedger", "IngestionRunManifest", "RecommendationPipeline",
     "DailyRecommendationJob", "DailyRecommendationJobResult", "RiskGuardian", "RiskLimits", "PortfolioRiskContext",
