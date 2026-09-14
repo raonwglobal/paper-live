@@ -37,7 +37,7 @@ def test_portfolio_risk_blocks_market_concentration() -> None:
 def test_portfolio_risk_blocks_cash_reserve() -> None:
     risk = guardian(cash="250000", limits=RiskLimits(min_cash_reserve=Decimal("0.10")))
     with pytest.raises(PermissionError, match="cash reserve"):
-        risk.approve_portfolio(order("200"), Decimal("1000"), context(account_value="250000", portfolio_notional="0", market_notional="0"))
+        risk.approve_portfolio(order("230"), Decimal("1000"), context(account_value="250000", portfolio_notional="0", market_notional="0"))
 
 
 def test_portfolio_risk_allows_sell_that_reduces_exposure() -> None:
