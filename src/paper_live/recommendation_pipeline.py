@@ -4,6 +4,7 @@ import json
 from collections.abc import Sequence
 from datetime import datetime
 from hashlib import sha256
+from math import isfinite
 from typing import Any
 
 from .data_lake import DatasetManifest, GoogleDriveStorageAgent
@@ -17,13 +18,26 @@ class RecommendationPipeline:
 
     def __init__(self, agent: StockRecommendationAgent | None = None,
                  storage: GoogleDriveStorageAgent | None = None,
-                 feature_engine: DailyFeatureEngine | None = None):
+                 feature_engine: DailyFeatureEngine | None = None,
+                 *, min_history: int = 2, min_volume: float = 1.0,
+                 max_abs_return_1d: float = 0.50, max_volatility: float = 0.20):
         if storage is None:
             raise ValueError("storage is required")
+        if min_history < 1 or min_volume < 0 or max_abs_return_1d <= 0 or max_volatility <= 0:
+            raise ValueError("invalid recommendation quality thresholds")
         self.agent = agent or StockRecommendationAgent()
         self.storage = storage
         self.feature_engine = feature_engine or DailyFeatureEngine()
         self.feature_service = FeatureDatasetService(self.agent)
+        self.min_history = min_history
+        self.min_volume = min_volume
+        self.max_abs_return_1d = max_abs_return_1d
+        self.max_volatility = max_volatility
+        self.last_filter_stats: dict[str, int] = {
+            "pit_eligible": 0, "latest_candidates": 0, "selected_candidates": 0,
+            "filtered_history": 0, "filtered_volume": 0, "filtered_return": 0,
+            "filtered_volatility": 0, "filtered_ohlc": 0,
+        }
 
     @staticmethod
     def _checksum(rows: Sequence[dict[str, Any]]) -> str:
@@ -73,6 +87,67 @@ class RecommendationPipeline:
             str(r.get("market", "")), str(r.get("symbol", "")), str(r.get("trade_date", ""))
         ))
 
+    @classmethod
+    def _history_counts(cls, rows: Sequence[dict[str, Any]], *, decision_time: str) -> dict[tuple[str, str], int]:
+        counts: dict[tuple[str, str], int] = {}
+        for row in rows:
+            if not cls._is_point_in_time(row, decision_time):
+                continue
+            symbol = str(row.get("symbol", "")).strip()
+            if not symbol:
+                continue
+            key = (str(row.get("market", "")), symbol)
+            counts[key] = counts.get(key, 0) + 1
+        return counts
+
+    def _filter_candidates(self, candidates: Sequence[dict[str, Any]], *, history_counts: dict[tuple[str, str], int]) -> list[dict[str, Any]]:
+        selected: list[dict[str, Any]] = []
+        stats = {"filtered_history": 0, "filtered_volume": 0, "filtered_return": 0,
+                 "filtered_volatility": 0, "filtered_ohlc": 0}
+        for row in candidates:
+            key = (str(row.get("market", "")), str(row.get("symbol", "")))
+            if history_counts.get(key, 0) < self.min_history:
+                stats["filtered_history"] += 1
+                continue
+            volume = row.get("volume")
+            try:
+                volume_value = float(volume)
+            except (TypeError, ValueError):
+                volume_value = 0.0
+            if not isfinite(volume_value) or volume_value < self.min_volume:
+                stats["filtered_volume"] += 1
+                continue
+            return_1d = row.get("return_1d")
+            if return_1d is not None:
+                try:
+                    return_value = float(return_1d)
+                except (TypeError, ValueError):
+                    return_value = float("inf")
+                if not isfinite(return_value) or abs(return_value) > self.max_abs_return_1d:
+                    stats["filtered_return"] += 1
+                    continue
+            volatility = row.get("volatility")
+            if volatility is not None:
+                try:
+                    volatility_value = float(volatility)
+                except (TypeError, ValueError):
+                    volatility_value = float("inf")
+                if not isfinite(volatility_value) or volatility_value > self.max_volatility:
+                    stats["filtered_volatility"] += 1
+                    continue
+            numeric = {key: row.get(key) for key in ("open", "high", "low", "close")}
+            if any(value is not None and not isfinite(float(value)) for value in numeric.values()):
+                stats["filtered_ohlc"] += 1
+                continue
+            open_value, high_value, low_value, close_value = (numeric[key] for key in ("open", "high", "low", "close"))
+            if close_value is None or close_value <= 0 or (high_value is not None and high_value < max(x for x in (open_value, close_value) if x is not None)) or (low_value is not None and low_value > min(x for x in (open_value, close_value) if x is not None)):
+                stats["filtered_ohlc"] += 1
+                continue
+            selected.append(row)
+        self.last_filter_stats.update(stats)
+        self.last_filter_stats["selected_candidates"] = len(selected)
+        return selected
+
     @staticmethod
     def _bounded_score(value: Any, scale: float = 1.0, *, inverse: bool = False) -> float:
         try:
@@ -117,15 +192,23 @@ class RecommendationPipeline:
             row["input_checksum_sha256"] = input_checksum
         feature_manifest = self.storage.write_snapshot(feature_dataset, features, as_of=decision_time,
                                                         schema_version="daily-features-v1")
+        self.last_filter_stats = {
+            "pit_eligible": sum(self._is_point_in_time(row, decision_time) for row in features),
+            "latest_candidates": 0, "selected_candidates": 0,
+            "filtered_history": 0, "filtered_volume": 0, "filtered_return": 0,
+            "filtered_volatility": 0, "filtered_ohlc": 0,
+        }
         candidates = self._latest_candidates(features, decision_time=decision_time)
-        factor_rows = [self._factorize(row) for row in candidates]
+        self.last_filter_stats["latest_candidates"] = len(candidates)
+        history_counts = self._history_counts(features, decision_time=decision_time)
+        factor_rows = [self._factorize(row) for row in self._filter_candidates(candidates, history_counts=history_counts)]
         ranked = self.feature_service.rank(factor_rows, data_as_of=decision_time)
-        selected_by_symbol = {str(row.get("symbol", "")): row for row in candidates}
+        selected_by_identity = {(str(row.get("market", "")), str(row.get("symbol", ""))): row for row in candidates}
         for row in ranked:
             row["decision_time"] = decision_time
             row["dataset_version"] = "recommendation-v1"
             row["input_checksum_sha256"] = input_checksum
-            selected = selected_by_symbol.get(str(row.get("symbol", "")))
+            selected = selected_by_identity.get((str(row.get("market", "")), str(row.get("symbol", ""))))
             if selected is not None:
                 row["trade_date"] = selected.get("trade_date")
                 row["market"] = selected.get("market")
