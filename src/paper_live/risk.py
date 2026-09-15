@@ -15,7 +15,7 @@ class RiskLimits:
     max_daily_loss: Decimal = Decimal("500000")
     max_portfolio_notional: Decimal = Decimal("10000000")
     max_market_exposure: Decimal = Decimal("0.50")
-    min_cash_reserve: Decimal = Decimal("0.10")
+    min_cash_reserve: Decimal = Decimal("0.20")
 
     def __post_init__(self) -> None:
         if any(value < 0 for value in (self.max_order_notional, self.max_position_notional, self.max_daily_loss, self.max_portfolio_notional)):
@@ -87,8 +87,8 @@ class RiskGuardian:
             if base_value <= 0:
                 raise ValueError("invalid account value")
             projected_cash = self.account.cash - notional
-            if projected_cash / base_value < self.limits.min_cash_reserve:
-                raise PermissionError("cash reserve would fall below risk limit")
+            if projected_cash / base_value <= self.limits.min_cash_reserve:
+                raise PermissionError("cash reserve would fall below or equal risk limit")
 
         current_position = self.account.positions.get(order.symbol, Decimal("0"))
         projected = (
