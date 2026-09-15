@@ -13,7 +13,7 @@ from .portfolio_risk import PortfolioRiskContextBuilder, PortfolioRiskSnapshot, 
 from .recommendation_pipeline import RecommendationPipeline
 from .reflection import EpisodicMemory, SelfReflectionWorker, TradeEpisode
 from .risk import PortfolioRiskContext, RiskGuardian, RiskLimits
-from .run_manifest import RunArtifact, RunManifestTracker, RunManifestV3, build_run_manifest_v3, persist_run_manifest
+from .run_manifest import RunArtifact, RunFinalizationResult, RunManifestTracker, RunManifestV3, build_run_manifest_v3, persist_run_manifest
 from .trade_facade import InternalTradeFacade, OrderIntent, OrderPreview, PortfolioRevalidation, RiskAssessment
 
 __all__ = [
@@ -26,6 +26,6 @@ __all__ = [
     "serve_internal_api", "IngestionPipeline", "IngestionPipelineResult", "IngestionRetryService", "RetryReport",
     "FailureQueue", "IngestionFailure", "IngestionRunLedger", "IngestionRunManifest", "RecommendationPipeline",
     "DailyRecommendationJob", "DailyRecommendationJobResult", "RiskGuardian", "RiskLimits", "PortfolioRiskContext",
-    "PortfolioRiskContextBuilder", "PortfolioRiskSnapshot", "PositionValuation", "RunArtifact", "RunManifestV3",
+    "PortfolioRiskContextBuilder", "PortfolioRiskSnapshot", "PositionValuation", "RunArtifact", "RunFinalizationResult", "RunManifestV3",
     "RunManifestTracker", "build_run_manifest_v3", "persist_run_manifest",
 ]
