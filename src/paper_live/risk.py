@@ -65,7 +65,13 @@ class RiskGuardian:
         self.circuit_breaker = CircuitBreaker()
         self.daily_pnl = Decimal("0")
 
-    def approve(self, order: PaperOrderRequest, reference_price: Decimal) -> None:
+    def approve(
+        self,
+        order: PaperOrderRequest,
+        reference_price: Decimal,
+        *,
+        account_value: Decimal | None = None,
+    ) -> None:
         if self.circuit_breaker.tripped:
             raise PermissionError("circuit breaker is active")
         if order.quantity <= 0 or reference_price <= 0:
@@ -75,6 +81,14 @@ class RiskGuardian:
             raise PermissionError("order notional exceeds risk limit")
         if self.daily_pnl <= -self.limits.max_daily_loss:
             raise PermissionError("daily loss limit exceeded")
+
+        if order.side is OrderSide.BUY:
+            base_value = self.account.cash if account_value is None else account_value
+            if base_value <= 0:
+                raise ValueError("invalid account value")
+            projected_cash = self.account.cash - notional
+            if projected_cash / base_value < self.limits.min_cash_reserve:
+                raise PermissionError("cash reserve would fall below risk limit")
 
         current_position = self.account.positions.get(order.symbol, Decimal("0"))
         projected = (
@@ -95,9 +109,9 @@ class RiskGuardian:
         context: PortfolioRiskContext,
     ) -> None:
         """Apply portfolio-level exposure, market concentration and cash-reserve gates."""
-        self.approve(order, reference_price)
         if context.account_value <= 0 or context.portfolio_notional < 0 or context.market_notional < 0:
             raise ValueError("invalid portfolio risk context")
+        self.approve(order, reference_price, account_value=context.account_value)
         order_notional = order.quantity * reference_price
         projected_portfolio = context.portfolio_notional + (order_notional if order.side is OrderSide.BUY else -order_notional)
         if projected_portfolio < 0:
@@ -105,10 +119,6 @@ class RiskGuardian:
         if projected_portfolio > self.limits.max_portfolio_notional:
             raise PermissionError("portfolio notional exceeds risk limit")
         if context.account_value > 0:
-            if order.side is OrderSide.BUY:
-                projected_cash = self.account.cash - order_notional
-                if projected_cash / context.account_value < self.limits.min_cash_reserve:
-                    raise PermissionError("cash reserve would fall below risk limit")
             projected_market = context.market_notional + (order_notional if order.side is OrderSide.BUY else -order_notional)
             if projected_market < 0:
                 raise PermissionError("projected market exposure is negative")
