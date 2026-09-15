@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, replace
-from typing import Any, Mapping, Protocol
+from typing import Any, Protocol
 
 
 class RunManifestWriter(Protocol):
@@ -43,13 +44,13 @@ class RunManifestV3:
     def stage(self, name: str) -> RunArtifact | None:
         return next((item for item in self.stages if item.stage == name), None)
 
-    def with_stage(self, artifact: RunArtifact) -> "RunManifestV3":
+    def with_stage(self, artifact: RunArtifact) -> RunManifestV3:
         if self.stage(artifact.stage) is None:
             raise KeyError(f"unknown run manifest stage: {artifact.stage}")
         stages = tuple(artifact if item.stage == artifact.stage else item for item in self.stages)
         return replace(self, stages=stages)
 
-    def with_status(self, status: str) -> "RunManifestV3":
+    def with_status(self, status: str) -> RunManifestV3:
         return replace(self, status=status)
 
 
