@@ -1,9 +1,10 @@
 """Internal trade surface: Intent → Preview → Submit."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from decimal import Decimal, ROUND_DOWN
-from typing import Any, Mapping
+from decimal import ROUND_DOWN, Decimal
+from typing import Any
 from uuid import uuid4
 
 from .brokers.protocol import BrokerOrderRequest, OrderResult
@@ -147,16 +148,7 @@ class InternalTradeFacade:
         if result.intent is None:
             return None
         target_weight = Decimal(str(row["target_weight"])) if "target_weight" in row else None
-        return self.submit(
-            result.intent,
-            latest_prices[result.intent.symbol],
-            approval_id=approval_id,
-            portfolio_context=result.snapshot.context,
-            recommendation_run_id=recommendation_run_id,
-            portfolio_rank=portfolio_rank,
-            target_weight=target_weight,
-            run_manifest_id=run_manifest_id,
-        )
+        return self.submit(result.intent, latest_prices[result.intent.symbol], approval_id=approval_id, portfolio_context=result.snapshot.context, recommendation_run_id=recommendation_run_id, portfolio_rank=portfolio_rank, target_weight=target_weight, run_manifest_id=run_manifest_id)
 
     def to_paper_order(self, intent: OrderIntent) -> PaperOrderRequest:
         client_id = intent.client_order_id or f"paper-{uuid4().hex[:16]}"
@@ -253,14 +245,14 @@ class InternalTradeFacade:
         if not risk.approved:
             raise PermissionError("; ".join(risk.violations) or "risk rejected")
         if mode is ExecutionEnvironmentMode.REAL_LIVE:
-            result = self._submit_live(intent, approval_id=approval_id)
-            if audit is not None:
-                self.audit_trail.record_fill(audit, Fill(result.order_id, intent.symbol, intent.normalized_side(), Decimal("0"), reference_price, Decimal("0"), Decimal("0"), "ACCEPTED" if result.accepted else "REJECTED"))
-            return result
-        result = self.gateway.execute(self.to_paper_order(intent), reference_price)
-        if audit is not None:
-            self.audit_trail.record_fill(audit, result)
-        return result
+            live_result = self._submit_live(intent, approval_id=approval_id)
+            if audit is not None and self.audit_trail is not None:
+                self.audit_trail.record_result(audit, live_result)
+            return live_result
+        fill = self.gateway.execute(self.to_paper_order(intent), reference_price)
+        if audit is not None and self.audit_trail is not None:
+            self.audit_trail.record_fill(audit, fill)
+        return fill
 
     def cancel(self, *, broker: str, order_id: str, approval_id: str | None = None, symbol: str | None = None) -> bool:
         mode = self.controller.get_current_mode()
