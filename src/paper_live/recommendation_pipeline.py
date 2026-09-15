@@ -158,8 +158,10 @@ class RecommendationPipeline:
 
     @staticmethod
     def _number(value: Any, default: float = 0.0) -> float:
+        if value is None:
+            return default
         try:
-            number = float(value)
+            number = float(str(value))
         except (TypeError, ValueError):
             return default
         return number if isfinite(number) else default
