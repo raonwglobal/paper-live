@@ -12,7 +12,7 @@ def _facade(cash: str = "1000000", limits: RiskLimits | None = None):
     account = PaperAccount(Decimal(cash))
     controller = EnvironmentController()
     gateway = ExecutionGateway(controller, VirtualMatchingEngine(account, slippage_bps=Decimal("0")))
-    facade = InternalTradeFacade(controller, RiskGuardian(controller, account, limits or RiskLimits()))
+    facade = InternalTradeFacade(controller, RiskGuardian(controller, account, limits or RiskLimits()), gateway)
     return facade, account
 
 
