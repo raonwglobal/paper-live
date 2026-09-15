@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Mapping, Protocol
+from typing import Any, Protocol
 
 from .execution import Fill
 from .pnl import PortfolioLedger, Side
