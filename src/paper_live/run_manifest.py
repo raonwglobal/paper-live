@@ -53,6 +53,16 @@ class RunManifestV3:
         return replace(self, status=status)
 
 
+@dataclass(frozen=True)
+class RunFinalizationResult:
+    """Final persisted state of one completed or failed runtime run."""
+    run_id: str
+    status: str
+    manifest_checksum_sha256: str
+    manifest_uri: str | None
+    audit_uri: str | None
+
+
 def build_run_manifest_v3(*, run_id: str, status: str, decision_time: str,
                           ingestion: RunArtifact, features: RunArtifact,
                           recommendations: RunArtifact, portfolio: RunArtifact,
@@ -100,6 +110,22 @@ class RunManifestTracker:
         if persist:
             self._persist(updated)
         return updated
+
+    def finalize(self, run_id: str, *, status: str = "completed", audit_uri: str | None = None,
+                 persist: bool = True) -> RunFinalizationResult:
+        manifest = self.manifests.get(run_id)
+        if manifest is None:
+            raise KeyError(run_id)
+        updated = manifest.with_status(status)
+        self.manifests[run_id] = updated
+        manifest_uri = self._persist(updated) if persist else None
+        return RunFinalizationResult(
+            run_id=run_id,
+            status=status,
+            manifest_checksum_sha256=updated.checksum_sha256,
+            manifest_uri=manifest_uri,
+            audit_uri=audit_uri,
+        )
 
     def _persist(self, manifest: RunManifestV3) -> str | None:
         if self.writer is None:
