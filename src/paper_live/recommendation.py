@@ -84,8 +84,27 @@ class StockRecommendationAgent:
         return "E"
 
     def rank(self, rows: Sequence[Mapping[str, Any]], *, data_as_of: str) -> list[dict[str, Any]]:
-        results = [item for item in (self.score(row, data_as_of=data_as_of) for row in rows) if item is not None]
-        results.sort(key=lambda item: (-item.score, item.symbol))
-        return [asdict(Recommendation(item.symbol, item.score, index, item.grade, item.confidence,
-                                       item.reasons, item.model_version, item.data_as_of))
-                for index, item in enumerate(results, 1)]
+        results = [
+            (item, row)
+            for row in rows
+            if (item := self.score(row, data_as_of=data_as_of)) is not None
+        ]
+        results.sort(key=lambda pair: (-pair[0].score, pair[0].symbol))
+        ranked: list[dict[str, Any]] = []
+        for index, (item, source_row) in enumerate(results, 1):
+            recommendation = asdict(
+                Recommendation(
+                    item.symbol,
+                    item.score,
+                    index,
+                    item.grade,
+                    item.confidence,
+                    item.reasons,
+                    item.model_version,
+                    item.data_as_of,
+                )
+            )
+            # Preserve source metadata required for point-in-time lineage, portfolio
+            # construction, and downstream audit (e.g. market/trade_date/available_at).
+            ranked.append({**dict(source_row), **recommendation})
+        return ranked
