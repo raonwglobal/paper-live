@@ -125,7 +125,7 @@ class RecommendationPipeline:
                 continue
             if row.get("return_1d") is not None:
                 try:
-                    return_value = float(row["return_1d"])
+                    return_value = float(str(row["return_1d"]))
                 except (TypeError, ValueError):
                     return_value = float("inf")
                 if not isfinite(return_value) or abs(return_value) > self.max_abs_return_1d:
@@ -133,14 +133,14 @@ class RecommendationPipeline:
                     continue
             if row.get("volatility") is not None:
                 try:
-                    volatility_value = float(row["volatility"])
+                    volatility_value = float(str(row["volatility"]))
                 except (TypeError, ValueError):
                     volatility_value = float("inf")
                 if not isfinite(volatility_value) or volatility_value > self.max_volatility:
                     stats["filtered_volatility"] += 1
                     continue
             try:
-                numeric = {key: (None if row.get(key) is None else float(row[key])) for key in ("open", "high", "low", "close")}
+                numeric = {key: (None if row.get(key) is None else float(str(row[key]))) for key in ("open", "high", "low", "close")}
             except (TypeError, ValueError):
                 stats["filtered_ohlc"] += 1
                 continue
@@ -186,7 +186,7 @@ class RecommendationPipeline:
         if not total:
             return [dict(row) for row in ranked]
         weights = [value / total for value in raw_weights]
-        for row, weight, position in zip(selected, weights, range(1, len(selected) + 1)):
+        for row, weight, position in zip(selected, weights, range(1, len(selected) + 1), strict=True):
             row["portfolio_selected"] = True
             row["portfolio_rank"] = position
             row["target_weight"] = round(min(weight, self.portfolio.max_weight), 6)
