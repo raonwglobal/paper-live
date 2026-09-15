@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Mapping, Protocol
 
 
@@ -43,6 +43,15 @@ class RunManifestV3:
     def stage(self, name: str) -> RunArtifact | None:
         return next((item for item in self.stages if item.stage == name), None)
 
+    def with_stage(self, artifact: RunArtifact) -> "RunManifestV3":
+        if self.stage(artifact.stage) is None:
+            raise KeyError(f"unknown run manifest stage: {artifact.stage}")
+        stages = tuple(artifact if item.stage == artifact.stage else item for item in self.stages)
+        return replace(self, stages=stages)
+
+    def with_status(self, status: str) -> "RunManifestV3":
+        return replace(self, status=status)
+
 
 def build_run_manifest_v3(*, run_id: str, status: str, decision_time: str,
                           ingestion: RunArtifact, features: RunArtifact,
@@ -55,6 +64,47 @@ def build_run_manifest_v3(*, run_id: str, status: str, decision_time: str,
     if len({item.stage for item in stages}) != len(stages):
         raise ValueError("run manifest stages must be unique")
     return RunManifestV3(run_id=run_id, status=status, decision_time=decision_time, stages=stages)
+
+
+@dataclass
+class RunManifestTracker:
+    """Runtime registry that persists the same run_id as execution events arrive."""
+    writer: RunManifestWriter | None = None
+    manifests: dict[str, RunManifestV3] = field(default_factory=dict)
+
+    def register(self, manifest: RunManifestV3, *, persist: bool = True) -> RunManifestV3:
+        self.manifests[manifest.run_id] = manifest
+        if persist:
+            self._persist(manifest)
+        return manifest
+
+    def get(self, run_id: str) -> RunManifestV3 | None:
+        return self.manifests.get(run_id)
+
+    def bind_stage(self, run_id: str, artifact: RunArtifact, *, persist: bool = True) -> RunManifestV3:
+        manifest = self.manifests.get(run_id)
+        if manifest is None:
+            raise KeyError(run_id)
+        updated = manifest.with_stage(artifact)
+        self.manifests[run_id] = updated
+        if persist:
+            self._persist(updated)
+        return updated
+
+    def transition(self, run_id: str, status: str, *, persist: bool = True) -> RunManifestV3:
+        manifest = self.manifests.get(run_id)
+        if manifest is None:
+            raise KeyError(run_id)
+        updated = manifest.with_status(status)
+        self.manifests[run_id] = updated
+        if persist:
+            self._persist(updated)
+        return updated
+
+    def _persist(self, manifest: RunManifestV3) -> str | None:
+        if self.writer is None:
+            return None
+        return self.writer.write_run_manifest(manifest.run_id, manifest.as_dict())
 
 
 def persist_run_manifest(writer: RunManifestWriter, manifest: RunManifestV3) -> str:
