@@ -10,6 +10,7 @@ from typing import Any, Mapping, Protocol
 from .execution import Fill
 from .pnl import PortfolioLedger, Side
 from .reflection import TradeEpisode
+from .run_manifest import RunArtifact, RunManifestTracker
 
 
 class AuditArtifactWriter(Protocol):
@@ -61,6 +62,7 @@ class ExecutionAuditTrail:
     records: list[ExecutionAuditRecord] = field(default_factory=list)
     writer: AuditArtifactWriter | None = None
     folder_id: str | None = None
+    manifest_tracker: RunManifestTracker | None = None
 
     @staticmethod
     def _id(payload: Mapping[str, Any]) -> str:
@@ -73,6 +75,21 @@ class ExecutionAuditTrail:
         self.records.append(record)
         return record
 
+    def _bind(self, record: ExecutionAuditRecord, stage: str, *, status: str,
+              artifact_id: str | None = None, metadata: Mapping[str, Any] | None = None) -> None:
+        run_id = record.run_manifest_id
+        if self.manifest_tracker is None or not run_id:
+            return
+        self.manifest_tracker.bind_stage(
+            run_id,
+            RunArtifact(
+                stage=stage,
+                artifact_id=artifact_id or record.audit_id,
+                status=status,
+                metadata={"audit_id": record.audit_id, **dict(metadata or {})},
+            ),
+        )
+
     def create_submission(self, *, intent: Any, reference_price: Decimal, risk: Any,
                           portfolio_context: Any = None, recommendation_run_id: str | None = None,
                           portfolio_rank: int | None = None, target_weight: Decimal | None = None,
@@ -80,7 +97,7 @@ class ExecutionAuditTrail:
                           run_manifest_id: str | None = None) -> ExecutionAuditRecord:
         payload = {"symbol": intent.symbol, "side": intent.side, "quantity": str(intent.quantity),
                    "client_order_id": intent.client_order_id, "recommendation_run_id": recommendation_run_id,
-                   "portfolio_rank": portfolio_rank}
+                   "portfolio_rank": portfolio_rank, "run_manifest_id": run_manifest_id}
         context = portfolio_context
         record = ExecutionAuditRecord(
             audit_id=self._id(payload), status="SUBMITTED", created_at=datetime.now(UTC).isoformat(),
@@ -93,7 +110,9 @@ class ExecutionAuditTrail:
             market_notional=None if context is None else str(context.market_notional),
             market="" if context is None else str(context.market), client_order_id=str(intent.client_order_id),
             preview_id=preview_id, broker=broker, run_manifest_id=run_manifest_id)
-        return self.append(record)
+        result = self.append(record)
+        self._bind(result, "execution_audit", status=result.status)
+        return result
 
     def record_result(self, submission: ExecutionAuditRecord, result: Any) -> ExecutionAuditRecord:
         values = {**asdict(submission), "status": str(getattr(result, "status", "ACCEPTED")),
@@ -105,7 +124,14 @@ class ExecutionAuditTrail:
             values["broker_order_id"] = str(getattr(result, "order_id", "")) or None
         updated = ExecutionAuditRecord(**values)
         self.records[:] = [r for r in self.records if r.audit_id != submission.audit_id]
-        return self.append(updated)
+        updated = self.append(updated)
+        if isinstance(result, Fill):
+            self._bind(updated, "fill", status=updated.status, artifact_id=result.order_id,
+                       metadata={"quantity": str(result.quantity), "price": str(result.price)})
+        else:
+            self._bind(updated, "execution_audit", status=updated.status,
+                       metadata={"broker_order_id": updated.broker_order_id})
+        return updated
 
     def record_fill(self, submission: ExecutionAuditRecord, fill: Fill) -> ExecutionAuditRecord:
         return self.record_result(submission, fill)
@@ -116,7 +142,9 @@ class ExecutionAuditTrail:
             raise KeyError(audit_id)
         updated = ExecutionAuditRecord(**{**asdict(record), "pnl": str(pnl), "pnl_reference": pnl_reference})
         self.records[:] = [r for r in self.records if r.audit_id != audit_id]
-        return self.append(updated)
+        updated = self.append(updated)
+        self._bind(updated, "pnl", status="COMPLETED", metadata={"pnl": str(pnl), "pnl_reference": pnl_reference})
+        return updated
 
     def record_reflection(self, audit_id: str, episode: TradeEpisode) -> ExecutionAuditRecord:
         record = self.get(audit_id)
@@ -124,7 +152,9 @@ class ExecutionAuditTrail:
             raise KeyError(audit_id)
         updated = ExecutionAuditRecord(**{**asdict(record), "reflection_episode_id": episode.episode_id})
         self.records[:] = [r for r in self.records if r.audit_id != audit_id]
-        return self.append(updated)
+        updated = self.append(updated)
+        self._bind(updated, "reflection", status="COMPLETED", artifact_id=episode.episode_id)
+        return updated
 
     def reconcile_fill_pnl(self, audit_id: str, ledger: PortfolioLedger, *, mark_price: Decimal) -> ExecutionAuditRecord:
         record = self.get(audit_id)
