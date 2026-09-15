@@ -88,6 +88,8 @@ def build_run_manifest_v3(
     reflection: RunArtifact,
 ) -> RunManifestV3:
     stages = (ingestion, features, recommendations, portfolio, risk, execution_audit, fill, pnl, reflection)
+    if len({item.stage for item in stages}) != len(stages):
+        raise ValueError("run manifest stages must be unique")
     return RunManifestV3(run_id=run_id, status=status, decision_time=decision_time, stages=stages)
 
 
