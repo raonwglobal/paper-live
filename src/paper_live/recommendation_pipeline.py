@@ -18,7 +18,7 @@ from .recommendation import StockRecommendationAgent
 class PortfolioConfig:
     max_positions: int = 10
     max_positions_per_market: int = 5
-    min_score: float = 55.0
+    min_score: float = 50.0
     min_confidence: float = 40.0
     max_weight: float = 0.25
 
