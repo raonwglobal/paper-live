@@ -134,6 +134,24 @@ class ExecutionAuditTrail:
         return updated
 
     def record_fill(self, submission: ExecutionAuditRecord, fill: Fill) -> ExecutionAuditRecord:
+        """Record a real fill; preserve zero-quantity broker acknowledgements as non-fills."""
+        if fill.quantity <= 0 and fill.status in {"ACCEPTED", "REJECTED"}:
+            values = {
+                **asdict(submission),
+                "status": fill.status,
+                "broker_order_id": fill.order_id or None,
+                "message": "",
+                "fill_quantity": None,
+                "fill_price": None,
+                "fee": None,
+                "tax": None,
+            }
+            updated = ExecutionAuditRecord(**values)
+            self.records[:] = [r for r in self.records if r.audit_id != submission.audit_id]
+            updated = self.append(updated)
+            self._bind(updated, "execution_audit", status=updated.status,
+                       metadata={"broker_order_id": updated.broker_order_id})
+            return updated
         return self.record_result(submission, fill)
 
     def record_pnl(self, audit_id: str, pnl: Decimal, *, pnl_reference: str) -> ExecutionAuditRecord:
