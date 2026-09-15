@@ -111,16 +111,17 @@ class RiskGuardian:
         """Apply portfolio-level exposure, market concentration and cash-reserve gates."""
         if context.account_value <= 0 or context.portfolio_notional < 0 or context.market_notional < 0:
             raise ValueError("invalid portfolio risk context")
-        self.approve(order, reference_price, account_value=context.account_value)
         order_notional = order.quantity * reference_price
-        projected_portfolio = context.portfolio_notional + (order_notional if order.side is OrderSide.BUY else -order_notional)
-        if projected_portfolio < 0:
-            raise PermissionError("projected portfolio exposure is negative")
-        if projected_portfolio > self.limits.max_portfolio_notional:
-            raise PermissionError("portfolio notional exceeds risk limit")
-        if context.account_value > 0:
+        if context.market and context.account_value > 0:
             projected_market = context.market_notional + (order_notional if order.side is OrderSide.BUY else -order_notional)
             if projected_market < 0:
                 raise PermissionError("projected market exposure is negative")
             if projected_market / context.account_value > self.limits.max_market_exposure:
                 raise PermissionError("market exposure exceeds risk limit")
+
+        self.approve(order, reference_price, account_value=context.account_value)
+        projected_portfolio = context.portfolio_notional + (order_notional if order.side is OrderSide.BUY else -order_notional)
+        if projected_portfolio < 0:
+            raise PermissionError("projected portfolio exposure is negative")
+        if projected_portfolio > self.limits.max_portfolio_notional:
+            raise PermissionError("portfolio notional exceeds risk limit")
