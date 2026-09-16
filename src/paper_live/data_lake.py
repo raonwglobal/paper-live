@@ -22,6 +22,8 @@ class DatasetManifest:
     run_id: str | None = None
     success_count: int = 0
     failure_count: int = 0
+    partition_count: int = 0
+    partition_keys: tuple[str, ...] = ()
 
 
 class DriveClient(Protocol):
@@ -127,17 +129,45 @@ class GoogleDriveStorageAgent:
         assert current is not None
         return current
 
-    def write_jsonl(self, dataset: str, rows: Sequence[dict[str, Any]], *, as_of: str, schema_version: str = "1.0", run_id: str | None = None, success_count: int = 0, failure_count: int = 0) -> DatasetManifest:
+    def _partition_folder(self, dataset: str, trade_date: str) -> str:
+        current: str | None = self.folder_id
+        for part in [p for p in dataset.strip("/").split("/") if p] + [f"trade_date={trade_date}"]:
+            current = self.client.ensure_folder(part, parent_id=current)
+        assert current is not None
+        return current
+
+    def write_jsonl(self, dataset: str, rows: Sequence[dict[str, Any]], *, as_of: str, schema_version: str = "1.0", run_id: str | None = None, success_count: int = 0, failure_count: int = 0, source: str | None = None) -> DatasetManifest:
         payload = b"".join(json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n" for row in rows)
         checksum = self._checksum(payload)
         folder = self._dataset_folder(dataset, as_of)
         self.client.upload(f"{dataset.split('/')[-1]}.jsonl", payload, folder_id=folder, mime_type="application/x-ndjson")
-        manifest = DatasetManifest(dataset, as_of, len(rows), schema_version, self.source, checksum, run_id, success_count, failure_count)
+        manifest = DatasetManifest(dataset, as_of, len(rows), schema_version, source or self.source, checksum, run_id, success_count, failure_count, 0, ())
         self.client.upload("manifest.json", json.dumps(asdict(manifest), ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8"), folder_id=folder, mime_type="application/json")
         return manifest
 
-    def write_snapshot(self, dataset: str, rows: Sequence[dict[str, Any]], *, as_of: str, schema_version: str = "1.0", run_id: str | None = None, success_count: int = 0, failure_count: int = 0) -> DatasetManifest:
-        return self.write_jsonl(dataset, rows, as_of=as_of, schema_version=schema_version, run_id=run_id, success_count=success_count, failure_count=failure_count)
+    def write_partitioned_jsonl(self, dataset: str, partitions: dict[str, Sequence[dict[str, Any]]], *, as_of: str, schema_version: str = "1.0", run_id: str | None = None, success_count: int = 0, failure_count: int = 0, source: str | None = None) -> DatasetManifest:
+        """Write deterministic date partitions and an aggregate index manifest."""
+        partition_keys = tuple(sorted(partitions))
+        checksummed_parts: list[dict[str, Any]] = []
+        total_rows = 0
+        for trade_date in partition_keys:
+            rows = sorted(partitions[trade_date], key=lambda row: (str(row.get("market", "")), str(row.get("symbol", "")), str(row.get("trade_date", ""))))
+            payload = b"".join(json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n" for row in rows)
+            folder = self._partition_folder(dataset, trade_date)
+            file_name = f"{dataset.split('/')[-1]}.jsonl"
+            self.client.upload(file_name, payload, folder_id=folder, mime_type="application/x-ndjson")
+            checksummed_parts.append({"trade_date": trade_date, "row_count": len(rows), "checksum_sha256": self._checksum(payload)})
+            total_rows += len(rows)
+        aggregate = {"dataset": dataset, "as_of": as_of, "schema_version": schema_version, "source": source or self.source, "run_id": run_id, "partitions": checksummed_parts}
+        aggregate_bytes = json.dumps(aggregate, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        index_folder = self._dataset_folder(dataset, as_of)
+        self.client.upload("partitions.json", aggregate_bytes, folder_id=index_folder, mime_type="application/json")
+        manifest = DatasetManifest(dataset, as_of, total_rows, schema_version, source or self.source, self._checksum(aggregate_bytes), run_id, success_count, failure_count, len(partition_keys), partition_keys)
+        self.client.upload("manifest.json", json.dumps(asdict(manifest), ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8"), folder_id=index_folder, mime_type="application/json")
+        return manifest
+
+    def write_snapshot(self, dataset: str, rows: Sequence[dict[str, Any]], *, as_of: str, schema_version: str = "1.0", run_id: str | None = None, success_count: int = 0, failure_count: int = 0, source: str | None = None) -> DatasetManifest:
+        return self.write_jsonl(dataset, rows, as_of=as_of, schema_version=schema_version, run_id=run_id, success_count=success_count, failure_count=failure_count, source=source)
 
     def write_run_manifest(self, run_id: str, manifest: dict[str, Any], *, folder_name: str = "runs") -> str:
         folder = self.client.ensure_folder(folder_name, parent_id=self.folder_id)
