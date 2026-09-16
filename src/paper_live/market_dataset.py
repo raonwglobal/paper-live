@@ -74,13 +74,17 @@ class DailyPriceNormalizer:
         cls, row: Mapping[str, Any], *, symbol: str, market: str, source: str, available_at: str
     ) -> DailyPriceRecord:
         code = str(cls._get(row, "symbol", symbol) or symbol).strip()
+        normalized_market = str(market).strip().upper()
+        normalized_source = str(source).strip() or "unknown"
+        if not normalized_market:
+            raise ValueError("daily price requires market")
         trade_date = cls._date(cls._get(row, "trade_date"))
         close = cls._number(cls._get(row, "close"))
         if not code or close is None:
             raise ValueError("daily price requires symbol and close")
         return DailyPriceRecord(
             symbol=code,
-            market=market,
+            market=normalized_market,
             trade_date=trade_date,
             open=cls._number(cls._get(row, "open")),
             high=cls._number(cls._get(row, "high")),
@@ -89,7 +93,7 @@ class DailyPriceNormalizer:
             volume=cls._number(cls._get(row, "volume")),
             value=cls._number(cls._get(row, "value")),
             adjusted_close=cls._number(cls._get(row, "adjusted_close")),
-            source=source,
+            source=normalized_source,
             available_at=available_at,
         )
 
@@ -99,7 +103,7 @@ class DailyDatasetBuilder:
         self.storage = storage
 
     def build(
-        self, rows: Iterable[DailyPriceRecord], *, as_of: str, dataset: str = "market/daily_prices"
+        self, rows: Iterable[DailyPriceRecord], *, as_of: str, dataset: str = "market/daily_prices", run_id: str | None = None
     ) -> DatasetManifest:
         unique: dict[tuple[str, str, str], DailyPriceRecord] = {}
         for row in rows:
@@ -114,8 +118,16 @@ class DailyDatasetBuilder:
                 raise ValueError("available_at cannot precede trade_date")
             unique[(row.market, row.symbol, row.trade_date)] = row
         ordered = sorted(unique.values(), key=lambda r: (r.market, r.symbol, r.trade_date))
-        return self.storage.write_jsonl(
-            dataset, [r.as_row() for r in ordered], as_of=as_of, schema_version="daily-price-v2"
+        partitions: dict[str, list[dict[str, Any]]] = {}
+        for row in ordered:
+            partitions.setdefault(row.trade_date, []).append(row.as_row())
+        return self.storage.write_partitioned_jsonl(
+            dataset,
+            partitions,
+            as_of=as_of,
+            schema_version="daily-price-v2",
+            run_id=run_id,
+            source=ordered[0].source if ordered else None,
         )
 
 
@@ -133,7 +145,10 @@ class DailyPriceIngestionService:
         market: str,
         source: str,
         available_at: str | None = None,
+        run_id: str | None = None,
     ) -> DatasetManifest:
+        if start_date > end_date:
+            raise ValueError("start_date cannot be after end_date")
         available = available_at or datetime.now(UTC).isoformat()
         rows: list[DailyPriceRecord] = []
         for symbol in sorted(set(s.strip() for s in symbols if s.strip())):
@@ -144,4 +159,4 @@ class DailyPriceIngestionService:
                         item, symbol=symbol, market=market, source=source, available_at=available
                     )
                 )
-        return self.builder.build(rows, as_of=available)
+        return self.builder.build(rows, as_of=available, run_id=run_id)
