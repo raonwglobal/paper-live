@@ -15,7 +15,7 @@ class RiskLimits:
     max_daily_loss: Decimal = Decimal("500000")
     max_portfolio_notional: Decimal = Decimal("10000000")
     max_market_exposure: Decimal = Decimal("0.50")
-    min_cash_reserve: Decimal = Decimal("0.20")
+    min_cash_reserve: Decimal = Decimal("0.10")
 
     def __post_init__(self) -> None:
         if any(value < 0 for value in (self.max_order_notional, self.max_position_notional, self.max_daily_loss, self.max_portfolio_notional)):
