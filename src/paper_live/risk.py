@@ -122,8 +122,10 @@ class RiskGuardian:
             projected_market = context.market_notional + (order_notional if order.side is OrderSide.BUY else -order_notional)
             if projected_market < 0:
                 raise PermissionError("projected market exposure is negative")
-            if projected_market / context.account_value > self.limits.max_market_exposure:
-                raise PermissionError("market exposure exceeds risk limit")
+            # Treat the configured concentration as a hard ceiling: reaching the
+            # boundary is rejected so that rounding cannot create a breach.
+            if projected_market / context.account_value >= self.limits.max_market_exposure:
+                raise PermissionError("market exposure exceeds or reaches risk limit")
 
         projected_portfolio = context.portfolio_notional + (order_notional if order.side is OrderSide.BUY else -order_notional)
         if projected_portfolio < 0:
