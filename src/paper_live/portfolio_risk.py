@@ -71,8 +71,14 @@ class PortfolioRiskContextBuilder:
         selected_market = ""
         selected_market_notional = Decimal("0")
         if target_symbol:
-            selected_market = str(market_map.get(target_symbol, "UNKNOWN")).strip() or "UNKNOWN"
-            selected_market_notional = market_notionals.get(selected_market, Decimal("0"))
+            # An absent market mapping is not evidence that the target belongs
+            # to a specific concentration bucket. Leave the context market
+            # empty so the market-exposure gate is skipped until provenance is
+            # supplied explicitly.
+            raw_market = market_map.get(target_symbol)
+            if raw_market is not None and str(raw_market).strip():
+                selected_market = str(raw_market).strip()
+                selected_market_notional = market_notionals.get(selected_market, Decimal("0"))
 
         context = PortfolioRiskContext(
             account_value=account_value,
