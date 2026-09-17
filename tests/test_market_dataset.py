@@ -129,3 +129,23 @@ def test_ingestion_rejects_reversed_date_range(tmp_path):
             market="KRX",
             source="fake",
         )
+
+
+def test_partition_writer_rejects_mismatched_row_date(tmp_path):
+    storage = GoogleDriveStorageAgent(LocalDriveMirror(tmp_path), folder_id="datasets")
+    with pytest.raises(ValueError, match="does not match partition"):
+        storage.write_partitioned_jsonl(
+            "market/daily_prices",
+            {"2026-08-28": [{"market": "KRX", "symbol": "005930", "trade_date": "2026-08-29", "close": 1}]},
+            as_of="2026-08-29T00:00:00+00:00",
+        )
+
+
+def test_partition_writer_normalizes_partition_keys(tmp_path):
+    storage = GoogleDriveStorageAgent(LocalDriveMirror(tmp_path), folder_id="datasets")
+    manifest = storage.write_partitioned_jsonl(
+        "market/daily_prices",
+        {"20260828": [{"market": "KRX", "symbol": "005930", "trade_date": "2026-08-28", "close": 1}]},
+        as_of="2026-08-29T00:00:00+00:00",
+    )
+    assert manifest.partition_keys == ("2026-08-28",)
