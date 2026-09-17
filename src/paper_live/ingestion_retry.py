@@ -70,22 +70,22 @@ class IngestionRetryService:
                 available_at=available,
                 persist=False,
             )
-            if report.symbols_ok:
+            if report.complete:
                 resolved += 1
                 rows.extend(report.rows)
                 continue
             observed = report.failures[0] if report.failures else None
-            next_failure = IngestionFailure(
+            next_attempts = failure.attempts + 1
+            remaining.add(IngestionFailure(
                 market=failure.market,
                 symbol=failure.symbol,
                 start_date=failure.start_date,
                 end_date=failure.end_date,
                 error_type=type(observed).__name__ if observed else failure.error_type,
                 error_message=observed.error if observed else failure.error_message,
-                attempts=failure.attempts + 1,
-                retryable=failure.attempts + 1 < self.max_attempts,
-            )
-            remaining.add(next_failure)
+                attempts=next_attempts,
+                retryable=next_attempts < self.max_attempts,
+            ))
         dataset_manifest = self.builder.build(rows, as_of=available) if rows else None
         return RetryReport(
             attempted=attempted,
