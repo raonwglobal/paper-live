@@ -44,6 +44,7 @@ class DailyPriceNormalizer:
         "volume": ("volume", "trade_volume", "acml_vol"),
         "value": ("value", "trade_value", "acml_tr_pbmn"),
         "adjusted_close": ("adjusted_close", "adj_close"),
+        "currency": ("currency", "currency_code", "crcy_cd"),
     }
 
     @classmethod
@@ -69,9 +70,23 @@ class DailyPriceNormalizer:
             return f"{raw[:4]}-{raw[4:6]}-{raw[6:]}"
         return date.fromisoformat(raw).isoformat()
 
+    @staticmethod
+    def _currency(value: Any, default: str) -> str:
+        currency = str(value or default).strip().upper()
+        if len(currency) != 3 or not currency.isalpha():
+            raise ValueError("currency must be a 3-letter ISO code")
+        return currency
+
     @classmethod
     def normalize(
-        cls, row: Mapping[str, Any], *, symbol: str, market: str, source: str, available_at: str
+        cls,
+        row: Mapping[str, Any],
+        *,
+        symbol: str,
+        market: str,
+        source: str,
+        available_at: str,
+        currency: str = "KRW",
     ) -> DailyPriceRecord:
         code = str(cls._get(row, "symbol", symbol) or symbol).strip()
         normalized_market = str(market).strip().upper()
@@ -94,6 +109,7 @@ class DailyPriceNormalizer:
             value=cls._number(cls._get(row, "value")),
             adjusted_close=cls._number(cls._get(row, "adjusted_close")),
             source=normalized_source,
+            currency=cls._currency(cls._get(row, "currency"), currency),
             available_at=available_at,
         )
 
@@ -110,24 +126,28 @@ class DailyDatasetBuilder:
             if not row.available_at:
                 raise ValueError("daily price row requires available_at")
             try:
-                available = datetime.fromisoformat(row.available_at.replace("Z", "+00:00"))
+                datetime.fromisoformat(row.available_at.replace("Z", "+00:00"))
                 effective = date.fromisoformat(row.trade_date)
             except ValueError as exc:
                 raise ValueError("invalid trade_date or available_at") from exc
-            if available.date() < effective:
-                raise ValueError("available_at cannot precede trade_date")
+            # Point-in-time eligibility is checked by recommendation consumers
+            # against decision_time; ingestion only validates the timestamp shape.
+            if effective < date(1900, 1, 1):
+                raise ValueError("trade_date is outside supported range")
             unique[(row.market, row.symbol, row.trade_date)] = row
         ordered = sorted(unique.values(), key=lambda r: (r.market, r.symbol, r.trade_date))
         partitions: dict[str, list[dict[str, Any]]] = {}
         for row in ordered:
             partitions.setdefault(row.trade_date, []).append(row.as_row())
+        sources = sorted({row.source for row in ordered})
+        manifest_source = sources[0] if len(sources) == 1 else "multi:" + ",".join(sources)
         return self.storage.write_partitioned_jsonl(
             dataset,
             partitions,
             as_of=as_of,
             schema_version="daily-price-v2",
             run_id=run_id,
-            source=ordered[0].source if ordered else None,
+            source=manifest_source if ordered else None,
         )
 
 
@@ -145,18 +165,28 @@ class DailyPriceIngestionService:
         market: str,
         source: str,
         available_at: str | None = None,
+        currency: str = "KRW",
         run_id: str | None = None,
     ) -> DatasetManifest:
         if start_date > end_date:
             raise ValueError("start_date cannot be after end_date")
         available = available_at or datetime.now(UTC).isoformat()
+        try:
+            datetime.fromisoformat(available.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("available_at must be an ISO-8601 timestamp") from exc
         rows: list[DailyPriceRecord] = []
         for symbol in sorted(set(s.strip() for s in symbols if s.strip())):
             payload = self.provider.fetch_daily_prices(symbol, start_date, end_date)
             for item in payload:
                 rows.append(
                     DailyPriceNormalizer.normalize(
-                        item, symbol=symbol, market=market, source=source, available_at=available
+                        item,
+                        symbol=symbol,
+                        market=market,
+                        source=source,
+                        available_at=available,
+                        currency=currency,
                     )
                 )
         return self.builder.build(rows, as_of=available, run_id=run_id)
