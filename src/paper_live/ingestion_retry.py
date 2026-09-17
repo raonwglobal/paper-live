@@ -20,7 +20,9 @@ class RetryReport:
 
 
 class IngestionRetryService:
-    """Bounded retry service that republishes recovered rows to the canonical dataset."""
+    """Bounded retry service that publishes recovered rows to an isolated recovery dataset."""
+
+    RECOVERY_DATASET = "market/daily_prices/recovery"
 
     def __init__(
         self,
@@ -86,7 +88,10 @@ class IngestionRetryService:
                 attempts=next_attempts,
                 retryable=next_attempts < self.max_attempts,
             ))
-        dataset_manifest = self.builder.build(rows, as_of=available) if rows else None
+        # Never overwrite canonical partitions with a partial retry result. The
+        # recovery dataset is append-by-run at the logical dataset level; a later
+        # reconciliation job can merge it with the complete canonical snapshot.
+        dataset_manifest = self.builder.build(rows, as_of=available, dataset=self.RECOVERY_DATASET) if rows else None
         return RetryReport(
             attempted=attempted,
             resolved=resolved,
