@@ -23,7 +23,7 @@ class Builder:
         return type("Manifest", (), {"dataset": dataset, "checksum_sha256": "test"})()
 
 
-def test_retry_resolves_and_publishes_recovered_rows():
+def test_retry_resolves_and_publishes_recovered_rows_to_recovery_dataset():
     provider = Provider()
     builder = Builder()
     queue = FailureQueue([
@@ -38,8 +38,9 @@ def test_retry_resolves_and_publishes_recovered_rows():
     assert report.remaining == 0
     assert provider.calls == 1
     assert len(report.rows) == 1
-    assert report.dataset_manifest.dataset == "market/daily_prices"
+    assert report.dataset_manifest.dataset == IngestionRetryService.RECOVERY_DATASET
     assert builder.calls[0][1] == "2026-08-28T16:00:00+00:00"
+    assert builder.calls[0][2] == IngestionRetryService.RECOVERY_DATASET
 
 
 def test_retry_stops_at_max_attempts():
