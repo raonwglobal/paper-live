@@ -7,6 +7,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -122,6 +123,16 @@ class GoogleDriveStorageAgent:
     def _checksum(content: bytes) -> str:
         return hashlib.sha256(content).hexdigest()
 
+    @staticmethod
+    def _validate_trade_date(trade_date: str) -> str:
+        try:
+            parsed = date.fromisoformat(str(trade_date))
+        except ValueError as exc:
+            raise ValueError("partition trade_date must be an ISO-8601 date") from exc
+        if parsed < date(1900, 1, 1):
+            raise ValueError("partition trade_date is outside supported range")
+        return parsed.isoformat()
+
     def _dataset_folder(self, dataset: str, as_of: str) -> str:
         current: str | None = self.folder_id
         for part in [p for p in dataset.strip("/").split("/") if p] + [f"date={as_of.replace(':', '-')}"]:
@@ -147,16 +158,23 @@ class GoogleDriveStorageAgent:
 
     def write_partitioned_jsonl(self, dataset: str, partitions: dict[str, Sequence[dict[str, Any]]], *, as_of: str, schema_version: str = "1.0", run_id: str | None = None, success_count: int = 0, failure_count: int = 0, source: str | None = None) -> DatasetManifest:
         """Write deterministic date partitions and an aggregate index manifest."""
-        partition_keys = tuple(sorted(partitions))
+        partition_keys = tuple(sorted(self._validate_trade_date(key) for key in partitions))
         checksummed_parts: list[dict[str, Any]] = []
         total_rows = 0
         for trade_date in partition_keys:
             rows = sorted(partitions[trade_date], key=lambda row: (str(row.get("market", "")), str(row.get("symbol", "")), str(row.get("trade_date", ""))))
+            for row in rows:
+                row_date = self._validate_trade_date(str(row.get("trade_date", "")))
+                if row_date != trade_date:
+                    raise ValueError(f"row trade_date {row_date} does not match partition {trade_date}")
             payload = b"".join(json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n" for row in rows)
             folder = self._partition_folder(dataset, trade_date)
             file_name = f"{dataset.split('/')[-1]}.jsonl"
             self.client.upload(file_name, payload, folder_id=folder, mime_type="application/x-ndjson")
-            checksummed_parts.append({"trade_date": trade_date, "row_count": len(rows), "checksum_sha256": self._checksum(payload)})
+            markets = sorted({str(row.get("market", "")).strip().upper() for row in rows if row.get("market")})
+            currencies = sorted({str(row.get("currency", "")).strip().upper() for row in rows if row.get("currency")})
+            sources = sorted({str(row.get("source", "")).strip() for row in rows if row.get("source")})
+            checksummed_parts.append({"trade_date": trade_date, "row_count": len(rows), "checksum_sha256": self._checksum(payload), "markets": markets, "currencies": currencies, "sources": sources})
             total_rows += len(rows)
         aggregate = {"dataset": dataset, "as_of": as_of, "schema_version": schema_version, "source": source or self.source, "run_id": run_id, "partitions": checksummed_parts}
         aggregate_bytes = json.dumps(aggregate, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
