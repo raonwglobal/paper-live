@@ -158,11 +158,17 @@ class GoogleDriveStorageAgent:
 
     def write_partitioned_jsonl(self, dataset: str, partitions: dict[str, Sequence[dict[str, Any]]], *, as_of: str, schema_version: str = "1.0", run_id: str | None = None, success_count: int = 0, failure_count: int = 0, source: str | None = None) -> DatasetManifest:
         """Write deterministic date partitions and an aggregate index manifest."""
-        partition_keys = tuple(sorted(self._validate_trade_date(key) for key in partitions))
+        normalized_partitions: dict[str, Sequence[dict[str, Any]]] = {}
+        for raw_key, rows in partitions.items():
+            trade_date = self._validate_trade_date(raw_key)
+            if trade_date in normalized_partitions:
+                raise ValueError(f"duplicate partition key after normalization: {trade_date}")
+            normalized_partitions[trade_date] = rows
+        partition_keys = tuple(sorted(normalized_partitions))
         checksummed_parts: list[dict[str, Any]] = []
         total_rows = 0
         for trade_date in partition_keys:
-            rows = sorted(partitions[trade_date], key=lambda row: (str(row.get("market", "")), str(row.get("symbol", "")), str(row.get("trade_date", ""))))
+            rows = sorted(normalized_partitions[trade_date], key=lambda row: (str(row.get("market", "")), str(row.get("symbol", "")), str(row.get("trade_date", ""))))
             for row in rows:
                 row_date = self._validate_trade_date(str(row.get("trade_date", "")))
                 if row_date != trade_date:
