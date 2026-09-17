@@ -5,7 +5,7 @@ import json
 import os
 import urllib.parse
 import urllib.request
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
@@ -156,7 +156,7 @@ class GoogleDriveStorageAgent:
         self.client.upload("manifest.json", json.dumps(asdict(manifest), ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8"), folder_id=folder, mime_type="application/json")
         return manifest
 
-    def write_partitioned_jsonl(self, dataset: str, partitions: dict[str, Sequence[dict[str, Any]]], *, as_of: str, schema_version: str = "1.0", run_id: str | None = None, success_count: int = 0, failure_count: int = 0, source: str | None = None) -> DatasetManifest:
+    def write_partitioned_jsonl(self, dataset: str, partitions: Mapping[str, Sequence[dict[str, Any]]], *, as_of: str, schema_version: str = "1.0", run_id: str | None = None, success_count: int = 0, failure_count: int = 0, source: str | None = None) -> DatasetManifest:
         """Write deterministic date partitions and an aggregate index manifest."""
         normalized_partitions: dict[str, Sequence[dict[str, Any]]] = {}
         for raw_key, rows in partitions.items():
