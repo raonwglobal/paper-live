@@ -79,3 +79,19 @@ def test_factor_scores_preserve_normalized_daily_ranges(tmp_path):
     assert factors["momentum_score"] == 55.0
     assert factors["technical_score"] == 51.0
     assert factors["risk_score"] == 47.5
+
+
+
+def test_pit_validator_rejects_future_and_missing_rows():
+    from paper_live.recommendation_pipeline import PointInTimeValidator
+
+    rows = [
+        {"symbol": "A", "available_at": "2026-08-28T09:00:00+09:00"},
+        {"symbol": "B", "available_at": "2026-08-28T19:00:00+09:00"},
+        {"symbol": "C"},
+    ]
+    eligible, report = PointInTimeValidator().validate(rows, decision_time="2026-08-28T18:00:00+09:00")
+    assert [row["symbol"] for row in eligible] == ["A"]
+    assert report.rejected_rows == 2
+    assert report.rejected_future_timestamp == 1
+    assert report.rejected_missing_timestamp == 1
