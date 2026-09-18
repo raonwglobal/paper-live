@@ -34,7 +34,7 @@ def test_revalidation_resizes_using_latest_price_not_recommendation_price():
 def test_revalidation_uses_latest_cash_and_rejects_cash_reserve_breach():
     account = PaperAccount(Decimal("10000"))
     facade = _facade(account)
-    row = {"symbol": "005930", "target_weight": "0.80", "close": "100"}
+    row = {"symbol": "005930", "target_weight": "0.95", "close": "100"}
 
     result = facade.revalidate_portfolio_row(row, account=account, latest_prices={"005930": Decimal("100")})
 
