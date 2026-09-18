@@ -7,10 +7,17 @@ from typing import Protocol, TypeVar
 
 
 class RowLike(Protocol):
-    market: str
-    symbol: str
-    trade_date: str
-    available_at: str
+    @property
+    def market(self) -> str: ...
+
+    @property
+    def symbol(self) -> str: ...
+
+    @property
+    def trade_date(self) -> str: ...
+
+    @property
+    def available_at(self) -> str: ...
 
 
 T = TypeVar("T", bound=RowLike)
