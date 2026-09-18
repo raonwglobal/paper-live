@@ -46,3 +46,5 @@ __all__ = [
     "PortfolioRiskContextBuilder", "PortfolioRiskSnapshot", "PositionValuation", "RunArtifact", "RunFinalizationResult", "RunManifestV3",
     "RunManifestTracker", "build_run_manifest_v3", "persist_run_manifest",
 ]
+
+from .recommendation_pipeline import PitValidationReport, PointInTimeValidator
