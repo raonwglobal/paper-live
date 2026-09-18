@@ -4,9 +4,10 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
+from .ingestion_reconcile import ReconciliationReport, RecoveryReconciler
 from .ingestion_run import FailureQueue, IngestionFailure
-from .ingestion_reconcile import RecoveryReconciler, ReconciliationReport
 from .market_dataset import DailyDatasetBuilder, DailyPriceProvider, DailyPriceRecord
+from .data_lake import DatasetManifest
 from .market_ingestion import ResilientDailyCollector
 
 
@@ -17,7 +18,7 @@ class RetryReport:
     remaining: int
     failures: FailureQueue
     rows: tuple[DailyPriceRecord, ...] = ()
-    dataset_manifest: object | None = None
+    dataset_manifest: DatasetManifest | None = None
 
 
 class IngestionRetryService:
@@ -110,7 +111,7 @@ class IngestionRetryService:
         as_of: str,
         dataset: str = "market/daily_prices",
         run_id: str | None = None,
-    ) -> tuple[ReconciliationReport, object | None]:
+    ) -> tuple[ReconciliationReport, DatasetManifest | None]:
         """Merge recovery rows and republish the complete canonical snapshot."""
         merged, report = RecoveryReconciler().merge(canonical, recovery)
         if not merged:
