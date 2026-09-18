@@ -16,7 +16,7 @@ class Builder:
         self.rows = []
         self.calls = []
 
-    def build(self, rows, *, as_of, dataset="market/daily_prices"):
+    def build(self, rows, *, as_of, dataset="market/daily_prices", run_id=None):
         rows = tuple(rows)
         self.rows.extend(rows)
         self.calls.append((rows, as_of, dataset))
