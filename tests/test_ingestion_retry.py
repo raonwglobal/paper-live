@@ -62,3 +62,42 @@ def test_retry_stops_at_max_attempts():
     assert failure.attempts == 2
     assert failure.retryable is False
     assert builder.calls == []
+
+
+def test_retry_reconcile_republishes_merged_canonical_snapshot():
+    provider = Provider()
+    builder = Builder()
+    service = IngestionRetryService(
+        lambda market: provider, builder, max_attempts=2, sleeper=lambda _: None
+    )
+    from paper_live.market_dataset import DailyPriceRecord
+
+    canonical = (
+        DailyPriceRecord(
+            "000001", "KRX", "2026-08-28", 1, 1, 1, 100, 10,
+            source="canonical", available_at="2026-08-28T18:00:00+00:00",
+        ),
+    )
+    recovery = (
+        DailyPriceRecord(
+            "000001", "KRX", "2026-08-28", 1, 1, 1, 999, 10,
+            source="retry", available_at="2026-08-29T00:00:00+00:00",
+        ),
+        DailyPriceRecord(
+            "000002", "KRX", "2026-08-28", 1, 1, 1, 101, 11,
+            source="retry", available_at="2026-08-29T00:00:00+00:00",
+        ),
+    )
+
+    report, manifest = service.reconcile(
+        canonical,
+        recovery,
+        as_of="2026-08-29T01:00:00+00:00",
+    )
+
+    assert report.added_rows == 1
+    assert report.duplicate_recovery_rows == 1
+    assert manifest.dataset == "market/daily_prices"
+    merged_rows = builder.calls[-1][0]
+    assert [item.symbol for item in merged_rows] == ["000001", "000002"]
+    assert merged_rows[0].close == 100
