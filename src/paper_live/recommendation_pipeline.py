@@ -31,6 +31,41 @@ class PortfolioConfig:
             raise ValueError("portfolio max_weight must be in (0, 1]")
 
 
+@dataclass(frozen=True)
+class PitValidationReport:
+    input_rows: int
+    eligible_rows: int
+    rejected_rows: int
+    rejected_missing_timestamp: int
+    rejected_future_timestamp: int
+
+
+class PointInTimeValidator:
+    """Validate that observations were available no later than decision time."""
+
+    def validate(self, rows: Sequence[dict[str, Any]], *, decision_time: str) -> tuple[list[dict[str, Any]], PitValidationReport]:
+        decision = RecommendationPipeline._parse_aware(decision_time)
+        if decision is None:
+            raise ValueError("decision_time must be timezone-aware ISO-8601")
+        eligible: list[dict[str, Any]] = []
+        missing = 0
+        future = 0
+        for row in rows:
+            raw = row.get("available_at")
+            if not isinstance(raw, str) or not raw:
+                missing += 1
+                continue
+            available = RecommendationPipeline._parse_aware(raw)
+            if available is None:
+                missing += 1
+                continue
+            if available > decision:
+                future += 1
+                continue
+            eligible.append(dict(row))
+        return eligible, PitValidationReport(len(rows), len(eligible), len(rows) - len(eligible), missing, future)
+
+
 class RecommendationPipeline:
     """Build deterministic PIT features, recommendations, and a diversified portfolio."""
 
@@ -48,6 +83,7 @@ class RecommendationPipeline:
         self.storage = storage
         self.feature_engine = feature_engine or DailyFeatureEngine()
         self.feature_service = FeatureDatasetService(self.agent)
+        self.pit_validator = PointInTimeValidator()
         self.min_history = min_history
         self.min_volume = min_volume
         self.max_abs_return_1d = max_abs_return_1d
@@ -228,11 +264,12 @@ class RecommendationPipeline:
     def build_from_daily(self, daily_rows: Sequence[dict[str, Any]], *, decision_time: str, feature_dataset: str = "features/daily", recommendation_dataset: str = "recommendations/daily") -> tuple[list[dict[str, Any]], DatasetManifest, DatasetManifest]:
         ordered = sorted((dict(row) for row in daily_rows), key=lambda r: (str(r.get("market", "")), str(r.get("symbol", "")), str(r.get("trade_date", ""))))
         input_checksum = self._checksum(ordered)
-        features = self.feature_engine.build(ordered, decision_time=decision_time)
+        pit_rows, pit_report = self.pit_validator.validate(ordered, decision_time=decision_time)
+        features = self.feature_engine.build(pit_rows, decision_time=decision_time)
         for row in features:
             row["input_checksum_sha256"] = input_checksum
         feature_manifest = self.storage.write_snapshot(feature_dataset, features, as_of=decision_time, schema_version="daily-features-v1")
-        self.last_filter_stats = {"pit_eligible": sum(self._is_point_in_time(row, decision_time) for row in features), "latest_candidates": 0, "selected_candidates": 0, "filtered_history": 0, "filtered_volume": 0, "filtered_return": 0, "filtered_volatility": 0, "filtered_ohlc": 0}
+        self.last_filter_stats = {"pit_eligible": pit_report.eligible_rows, "pit_rejected": pit_report.rejected_rows, "pit_missing_timestamp": pit_report.rejected_missing_timestamp, "pit_future_timestamp": pit_report.rejected_future_timestamp, "latest_candidates": 0, "selected_candidates": 0, "filtered_history": 0, "filtered_volume": 0, "filtered_return": 0, "filtered_volatility": 0, "filtered_ohlc": 0}
         candidates = self._latest_candidates(features, decision_time=decision_time)
         self.last_filter_stats["latest_candidates"] = len(candidates)
         history_counts = self._history_counts(features, decision_time=decision_time)
