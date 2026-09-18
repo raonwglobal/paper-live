@@ -14,6 +14,7 @@ from .execution import (
 )
 from .execution_audit import ExecutionAuditRecord, ExecutionAuditTrail
 from .ingestion_pipeline import IngestionPipeline, IngestionPipelineResult
+from .ingestion_reconcile import RecoveryReconciler, ReconciliationReport
 from .ingestion_retry import IngestionRetryService, RetryReport
 from .ingestion_run import FailureQueue, IngestionFailure, IngestionRunLedger, IngestionRunManifest
 from .internal_api import InternalApiApp, create_internal_server, serve_internal_api
@@ -40,7 +41,7 @@ __all__ = [
     "BacktestRunner", "EpisodicMemory", "SelfReflectionWorker", "TradeEpisode", "StateGraph", "build_analysis_graph",
     "InternalTradeFacade", "OrderIntent", "OrderPreview", "PortfolioRevalidation", "RiskAssessment", "InternalApiApp", "create_internal_server",
     "serve_internal_api", "IngestionPipeline", "IngestionPipelineResult", "IngestionRetryService", "RetryReport",
-    "FailureQueue", "IngestionFailure", "IngestionRunLedger", "IngestionRunManifest", "RecommendationPipeline",
+    "FailureQueue", "IngestionFailure", "IngestionRunLedger", "IngestionRunManifest", "RecoveryReconciler", "ReconciliationReport", "RecommendationPipeline",
     "DailyRecommendationJob", "DailyRecommendationJobResult", "RiskGuardian", "RiskLimits", "PortfolioRiskContext",
     "PortfolioRiskContextBuilder", "PortfolioRiskSnapshot", "PositionValuation", "RunArtifact", "RunFinalizationResult", "RunManifestV3",
     "RunManifestTracker", "build_run_manifest_v3", "persist_run_manifest",
