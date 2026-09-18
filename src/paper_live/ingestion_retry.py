@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
 from .ingestion_run import FailureQueue, IngestionFailure
+from .ingestion_reconcile import RecoveryReconciler, ReconciliationReport
 from .market_dataset import DailyDatasetBuilder, DailyPriceProvider, DailyPriceRecord
 from .market_ingestion import ResilientDailyCollector
 
@@ -100,3 +101,24 @@ class IngestionRetryService:
             rows=tuple(rows),
             dataset_manifest=dataset_manifest,
         )
+
+    def reconcile(
+        self,
+        canonical: Sequence[DailyPriceRecord],
+        recovery: Iterable[DailyPriceRecord],
+        *,
+        as_of: str,
+        dataset: str = "market/daily_prices",
+        run_id: str | None = None,
+    ) -> tuple[ReconciliationReport, object | None]:
+        """Merge recovery rows and republish the complete canonical snapshot."""
+        merged, report = RecoveryReconciler().merge(canonical, recovery)
+        if not merged:
+            return report, None
+        manifest = self.builder.build(
+            merged,
+            as_of=as_of,
+            dataset=dataset,
+            run_id=run_id,
+        )
+        return report, manifest
