@@ -45,6 +45,33 @@ class IngestionRetryService:
         self.max_attempts = max_attempts
         self.sleeper = sleeper
 
+    @staticmethod
+    def _record_from_row(row: dict[str, object]) -> DailyPriceRecord:
+        required = {"symbol", "market", "trade_date", "close", "available_at"}
+        if not required.issubset(row):
+            missing = ", ".join(sorted(required - set(row)))
+            raise ValueError(f"recovery row missing fields: {missing}")
+        return DailyPriceRecord(
+            symbol=str(row["symbol"]),
+            market=str(row["market"]),
+            trade_date=str(row["trade_date"]),
+            open=float(row["open"]) if row.get("open") is not None else None,
+            high=float(row["high"]) if row.get("high") is not None else None,
+            low=float(row["low"]) if row.get("low") is not None else None,
+            close=float(row["close"]),
+            volume=float(row["volume"]) if row.get("volume") is not None else None,
+            value=float(row["value"]) if row.get("value") is not None else None,
+            adjusted_close=float(row["adjusted_close"]) if row.get("adjusted_close") is not None else None,
+            source=str(row.get("source", "unknown")),
+            currency=str(row.get("currency", "KRW")),
+            available_at=str(row["available_at"]),
+            schema_version=str(row.get("schema_version", "daily-price-v2")),
+        )
+
+    def _read_recovery_rows(self) -> tuple[DailyPriceRecord, ...]:
+        rows = self.builder.storage.read_partitioned_jsonl(self.RECOVERY_DATASET)
+        return tuple(self._record_from_row(dict(row)) for row in rows)
+
     def run(self, queue: FailureQueue, *, available_at: str | None = None) -> RetryReport:
         remaining = FailureQueue(item for item in queue.all() if not item.retryable)
         resolved = 0
@@ -90,10 +117,23 @@ class IngestionRetryService:
                 attempts=next_attempts,
                 retryable=next_attempts < self.max_attempts,
             ))
-        # Never overwrite canonical partitions with a partial retry result. The
-        # recovery dataset is append-by-run at the logical dataset level; a later
-        # reconciliation job can merge it with the complete canonical snapshot.
-        dataset_manifest = self.builder.build(rows, as_of=available, dataset=self.RECOVERY_DATASET) if rows else None
+
+        # Recovery partitions are cumulative. A retry must never erase rows
+        # recovered by an earlier retry run for the same trade date.
+        dataset_manifest = None
+        if rows:
+            existing = self._read_recovery_rows()
+            combined = {RecoveryReconciler._key(row): row for row in existing}
+            for row in rows:
+                key = RecoveryReconciler._key(row)
+                prior = combined.get(key)
+                if prior is None or RecoveryReconciler._timestamp(row) >= RecoveryReconciler._timestamp(prior):
+                    combined[key] = row
+            dataset_manifest = self.builder.build(
+                combined.values(),
+                as_of=available,
+                dataset=self.RECOVERY_DATASET,
+            )
         return RetryReport(
             attempted=attempted,
             resolved=resolved,
@@ -123,3 +163,29 @@ class IngestionRetryService:
             run_id=run_id,
         )
         return report, manifest
+
+    def reconcile_from_drive(
+        self,
+        *,
+        as_of: str,
+        dataset: str = "market/daily_prices",
+        recovery_dataset: str | None = None,
+        run_id: str | None = None,
+    ) -> tuple[ReconciliationReport, DatasetManifest | None]:
+        """Load canonical and recovery partitions from Drive, merge them, and republish canonical."""
+        canonical_rows = tuple(
+            self._record_from_row(dict(row))
+            for row in self.builder.storage.read_partitioned_jsonl(dataset)
+        )
+        recovery_path = recovery_dataset or self.RECOVERY_DATASET
+        recovery_rows = tuple(
+            self._record_from_row(dict(row))
+            for row in self.builder.storage.read_partitioned_jsonl(recovery_path)
+        )
+        return self.reconcile(
+            canonical_rows,
+            recovery_rows,
+            as_of=as_of,
+            dataset=dataset,
+            run_id=run_id,
+        )
