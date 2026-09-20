@@ -28,6 +28,11 @@ def row(
     )
 
 
+class _NoopProvider:
+    def fetch_daily_prices(self, symbol, start_date, end_date):
+        return ()
+
+
 def test_reconciliation_adds_only_missing_recovery_keys():
     canonical = (row("A", "2026-08-28"),)
     recovery = (
@@ -80,7 +85,7 @@ def test_drive_reader_loads_partitioned_rows_and_reconciliation_from_drive(tmp_p
     loaded = storage.read_partitioned_jsonl("market/daily_prices")
     assert [item["symbol"] for item in loaded] == ["A"]
 
-    service = IngestionRetryService(lambda _: object(), builder)
+    service = IngestionRetryService(lambda _: _NoopProvider(), builder)
     report, manifest = service.reconcile_from_drive(as_of="2026-08-30T00:00:00+00:00")
 
     assert report.added_rows == 1
