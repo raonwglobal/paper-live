@@ -118,10 +118,43 @@ class DailyDatasetBuilder:
     def __init__(self, storage: GoogleDriveStorageAgent):
         self.storage = storage
 
+    @staticmethod
+    def _key(row: DailyPriceRecord) -> tuple[str, str, str]:
+        return (row.market.strip().upper(), row.symbol.strip(), row.trade_date)
+
+    def _existing_rows(self, dataset: str) -> tuple[DailyPriceRecord, ...]:
+        reader = getattr(self.storage, "read_partitioned_jsonl", None)
+        if reader is None:
+            return ()
+        raw_rows = reader(dataset)
+        records: list[DailyPriceRecord] = []
+        for raw in raw_rows:
+            records.append(DailyPriceRecord(
+                symbol=str(raw["symbol"]),
+                market=str(raw["market"]),
+                trade_date=str(raw["trade_date"]),
+                open=float(raw["open"]) if raw.get("open") is not None else None,
+                high=float(raw["high"]) if raw.get("high") is not None else None,
+                low=float(raw["low"]) if raw.get("low") is not None else None,
+                close=float(raw["close"]),
+                volume=float(raw["volume"]) if raw.get("volume") is not None else None,
+                value=float(raw["value"]) if raw.get("value") is not None else None,
+                adjusted_close=float(raw["adjusted_close"]) if raw.get("adjusted_close") is not None else None,
+                source=str(raw.get("source", "unknown")),
+                currency=str(raw.get("currency", "KRW")),
+                available_at=str(raw["available_at"]),
+                schema_version=str(raw.get("schema_version", "daily-price-v2")),
+            ))
+        return tuple(records)
+
     def build(
         self, rows: Iterable[DailyPriceRecord], *, as_of: str, dataset: str = "market/daily_prices", run_id: str | None = None
     ) -> DatasetManifest:
-        unique: dict[tuple[str, str, str], DailyPriceRecord] = {}
+        # Dataset partitions are shared by all markets/providers. Read the current
+        # snapshot first so a provider refresh cannot erase another provider's rows.
+        unique: dict[tuple[str, str, str], DailyPriceRecord] = {
+            self._key(row): row for row in self._existing_rows(dataset)
+        }
         for row in rows:
             if not row.available_at:
                 raise ValueError("daily price row requires available_at")
@@ -130,12 +163,10 @@ class DailyDatasetBuilder:
                 effective = date.fromisoformat(row.trade_date)
             except ValueError as exc:
                 raise ValueError("invalid trade_date or available_at") from exc
-            # Point-in-time eligibility is checked by recommendation consumers
-            # against decision_time; ingestion only validates the timestamp shape.
             if effective < date(1900, 1, 1):
                 raise ValueError("trade_date is outside supported range")
-            unique[(row.market, row.symbol, row.trade_date)] = row
-        ordered = sorted(unique.values(), key=lambda r: (r.market, r.symbol, r.trade_date))
+            unique[self._key(row)] = row
+        ordered = sorted(unique.values(), key=lambda r: self._key(r))
         partitions: dict[str, list[dict[str, Any]]] = {}
         for row in ordered:
             partitions.setdefault(row.trade_date, []).append(row.as_row())
