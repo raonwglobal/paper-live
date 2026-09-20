@@ -20,7 +20,7 @@ from .ingestion_run import FailureQueue, IngestionFailure, IngestionRunLedger, I
 from .internal_api import InternalApiApp, create_internal_server, serve_internal_api
 from .orchestrator import StateGraph, build_analysis_graph
 from .portfolio_risk import PortfolioRiskContextBuilder, PortfolioRiskSnapshot, PositionValuation
-from .recommendation_pipeline import RecommendationPipeline
+from .recommendation_pipeline import PitValidationReport, PointInTimeValidator, RecommendationPipeline
 from .reflection import EpisodicMemory, SelfReflectionWorker, TradeEpisode
 from .risk import PortfolioRiskContext, RiskGuardian, RiskLimits
 from .run_manifest import (
@@ -42,9 +42,9 @@ __all__ = [
     "InternalTradeFacade", "OrderIntent", "OrderPreview", "PortfolioRevalidation", "RiskAssessment", "InternalApiApp", "create_internal_server",
     "serve_internal_api", "IngestionPipeline", "IngestionPipelineResult", "IngestionRetryService", "RetryReport",
     "FailureQueue", "IngestionFailure", "IngestionRunLedger", "IngestionRunManifest", "RecoveryReconciler", "ReconciliationReport", "RecommendationPipeline",
+    "PitValidationReport", "PointInTimeValidator",
     "DailyRecommendationJob", "DailyRecommendationJobResult", "RiskGuardian", "RiskLimits", "PortfolioRiskContext",
     "PortfolioRiskContextBuilder", "PortfolioRiskSnapshot", "PositionValuation", "RunArtifact", "RunFinalizationResult", "RunManifestV3",
     "RunManifestTracker", "build_run_manifest_v3", "persist_run_manifest",
 ]
 
-from .recommendation_pipeline import PitValidationReport, PointInTimeValidator
