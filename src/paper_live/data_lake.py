@@ -122,23 +122,31 @@ class LocalDriveMirror:
     def __init__(self, root: str | Path):
         self.root = Path(root)
 
+    def _resolve(self, path: str | None) -> Path:
+        if not path:
+            return self.root / "root"
+        candidate = Path(path)
+        if candidate.is_absolute():
+            return candidate
+        return self.root / path
+
     def ensure_folder(self, name: str, *, parent_id: str | None = None) -> str:
-        folder = self.root / (parent_id or "root") / name
+        folder = self._resolve(parent_id) / name
         folder.mkdir(parents=True, exist_ok=True)
         return str(folder)
 
     def upload(self, name: str, content: bytes, *, folder_id: str | None = None, mime_type: str = "application/octet-stream") -> str:
-        target = Path(folder_id or str(self.root / "root")) / name
+        target = self._resolve(folder_id) / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
         return str(target)
 
     def find_file(self, name: str, *, parent_id: str | None = None, mime_type: str | None = None) -> str | None:
-        target = Path(parent_id or str(self.root / "root")) / name
-        return str(target) if target.is_file() else None
+        target = self._resolve(parent_id) / name
+        return str(target) if target.is_file() or (mime_type == "application/vnd.google-apps.folder" and target.is_dir()) else None
 
     def list_files(self, *, parent_id: str, name_prefix: str | None = None) -> Sequence[Mapping[str, str]]:
-        folder = Path(parent_id)
+        folder = self._resolve(parent_id)
         if not folder.is_dir():
             return ()
         return tuple({"id": str(path), "name": path.name, "mimeType": ""} for path in folder.iterdir() if path.is_file() and (not name_prefix or path.name.startswith(name_prefix)))
