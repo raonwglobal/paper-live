@@ -69,7 +69,13 @@ class IngestionRetryService:
         )
 
     def _read_recovery_rows(self) -> tuple[DailyPriceRecord, ...]:
-        rows = self.builder.storage.read_partitioned_jsonl(self.RECOVERY_DATASET)
+        storage = getattr(self.builder, "storage", None)
+        if storage is None:
+            return ()
+        reader = getattr(storage, "read_partitioned_jsonl", None)
+        if reader is None:
+            return ()
+        rows = reader(self.RECOVERY_DATASET)
         return tuple(self._record_from_row(dict(row)) for row in rows)
 
     def run(self, queue: FailureQueue, *, available_at: str | None = None) -> RetryReport:
@@ -173,15 +179,13 @@ class IngestionRetryService:
         run_id: str | None = None,
     ) -> tuple[ReconciliationReport, DatasetManifest | None]:
         """Load canonical and recovery partitions from Drive, merge them, and republish canonical."""
-        canonical_rows = tuple(
-            self._record_from_row(dict(row))
-            for row in self.builder.storage.read_partitioned_jsonl(dataset)
-        )
+        storage = getattr(self.builder, "storage", None)
+        if storage is None or not hasattr(storage, "read_partitioned_jsonl"):
+            raise RuntimeError("reconcile_from_drive requires a readable Drive storage agent")
+        reader = storage.read_partitioned_jsonl
+        canonical_rows = tuple(self._record_from_row(dict(row)) for row in reader(dataset))
         recovery_path = recovery_dataset or self.RECOVERY_DATASET
-        recovery_rows = tuple(
-            self._record_from_row(dict(row))
-            for row in self.builder.storage.read_partitioned_jsonl(recovery_path)
-        )
+        recovery_rows = tuple(self._record_from_row(dict(row)) for row in reader(recovery_path))
         return self.reconcile(
             canonical_rows,
             recovery_rows,
