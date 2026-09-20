@@ -32,6 +32,12 @@ class DriveClient(Protocol):
     def ensure_folder(self, name: str, *, parent_id: str | None = None) -> str: ...
 
 
+class ReadableDriveClient(Protocol):
+    def find_file(self, name: str, *, parent_id: str | None = None, mime_type: str | None = None) -> str | None: ...
+    def list_files(self, *, parent_id: str, name_prefix: str | None = None) -> Sequence[Mapping[str, str]]: ...
+    def download(self, file_id: str) -> bytes: ...
+
+
 class GoogleDriveApiClient:
     """Small Drive v3 client with idempotent folder/file upserts."""
 
@@ -64,10 +70,27 @@ class GoogleDriveApiClient:
         if mime_type:
             clauses.append(f"mimeType='{mime_type}'")
         query = urllib.parse.quote(" and ".join(clauses))
-        url = f"https://www.googleapis.com/drive/v3/files?q={query}&fields=files(id,name,mimeType)&pageSize=10&{self._common_params()}"
+        url = f"https://www.googleapis.com/drive/v3/files?q={query}&fields=files(id,name,mimeType)&pageSize=100&{self._common_params()}"
         payload = json.loads(self._request("GET", url))
         files = payload.get("files", [])
         return files[0]["id"] if files else None
+
+    def find_file(self, name: str, *, parent_id: str | None = None, mime_type: str | None = None) -> str | None:
+        return self._find(name, parent_id, mime_type)
+
+    def list_files(self, *, parent_id: str, name_prefix: str | None = None) -> Sequence[Mapping[str, str]]:
+        clauses = [f"'{parent_id}' in parents", "trashed=false"]
+        if name_prefix:
+            escaped = name_prefix.replace("'", "''")
+            clauses.append(f"name contains '{escaped}'")
+        query = urllib.parse.quote(" and ".join(clauses))
+        url = f"https://www.googleapis.com/drive/v3/files?q={query}&fields=files(id,name,mimeType)&pageSize=1000&{self._common_params()}"
+        payload = json.loads(self._request("GET", url))
+        return tuple(payload.get("files", ()))
+
+    def download(self, file_id: str) -> bytes:
+        url = f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?alt=media&{self._common_params()}"
+        return self._request("GET", url)
 
     def ensure_folder(self, name: str, *, parent_id: str | None = None) -> str:
         folder_mime = "application/vnd.google-apps.folder"
@@ -110,6 +133,19 @@ class LocalDriveMirror:
         target.write_bytes(content)
         return str(target)
 
+    def find_file(self, name: str, *, parent_id: str | None = None, mime_type: str | None = None) -> str | None:
+        target = Path(parent_id or str(self.root / "root")) / name
+        return str(target) if target.is_file() else None
+
+    def list_files(self, *, parent_id: str, name_prefix: str | None = None) -> Sequence[Mapping[str, str]]:
+        folder = Path(parent_id)
+        if not folder.is_dir():
+            return ()
+        return tuple({"id": str(path), "name": path.name, "mimeType": ""} for path in folder.iterdir() if path.is_file() and (not name_prefix or path.name.startswith(name_prefix)))
+
+    def download(self, file_id: str) -> bytes:
+        return Path(file_id).read_bytes()
+
 
 class GoogleDriveStorageAgent:
     """Versioned archive writer; dataset paths are materialized as Drive folders."""
@@ -146,6 +182,48 @@ class GoogleDriveStorageAgent:
             current = self.client.ensure_folder(part, parent_id=current)
         assert current is not None
         return current
+
+    def _find_dataset_folder(self, dataset: str) -> str | None:
+        current = self.folder_id
+        readable = self._readable_client()
+        for part in [p for p in dataset.strip("/").split("/") if p]:
+            current = readable.find_file(part, parent_id=current, mime_type="application/vnd.google-apps.folder")
+            if not current:
+                return None
+        return current
+
+    def _readable_client(self) -> ReadableDriveClient:
+        client = self.client
+        if not all(hasattr(client, name) for name in ("find_file", "list_files", "download")):
+            raise RuntimeError("configured Drive client does not support dataset reads")
+        return client  # type: ignore[return-value]
+
+    def read_partitioned_jsonl(self, dataset: str, *, trade_dates: Sequence[str] | None = None) -> tuple[dict[str, Any], ...]:
+        """Read canonical/recovery date partitions without depending on an as-of folder."""
+        readable = self._readable_client()
+        dataset_folder = self._find_dataset_folder(dataset)
+        if not dataset_folder:
+            return ()
+        wanted = {self._validate_trade_date(value) for value in trade_dates} if trade_dates else None
+        rows: list[dict[str, Any]] = []
+        for item in readable.list_files(parent_id=dataset_folder, name_prefix="trade_date="):
+            name = str(item.get("name", ""))
+            if not name.startswith("trade_date="):
+                continue
+            trade_date = name.split("=", 1)[1]
+            if wanted is not None and trade_date not in wanted:
+                continue
+            partition_folder = str(item["id"])
+            data_file = readable.find_file(f"{dataset.split('/')[-1]}.jsonl", parent_id=partition_folder)
+            if not data_file:
+                continue
+            for line in readable.download(data_file).decode("utf-8").splitlines():
+                if line.strip():
+                    row = json.loads(line)
+                    if self._validate_trade_date(str(row.get("trade_date", ""))) != trade_date:
+                        raise ValueError("dataset row trade_date does not match partition")
+                    rows.append(row)
+        return tuple(sorted(rows, key=lambda row: (str(row.get("market", "")).upper(), str(row.get("symbol", "")), str(row.get("trade_date", "")))))
 
     def write_jsonl(self, dataset: str, rows: Sequence[dict[str, Any]], *, as_of: str, schema_version: str = "1.0", run_id: str | None = None, success_count: int = 0, failure_count: int = 0, source: str | None = None) -> DatasetManifest:
         payload = b"".join(json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n" for row in rows)
