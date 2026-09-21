@@ -149,7 +149,15 @@ class LocalDriveMirror:
         folder = self._resolve(parent_id)
         if not folder.is_dir():
             return ()
-        return tuple(\n            {\n                "id": str(path),\n                "name": path.name,\n                "mimeType": "application/vnd.google-apps.folder" if path.is_dir() else "",\n            }\n            for path in folder.iterdir()\n            if not name_prefix or path.name.startswith(name_prefix)\n        )
+        return tuple(
+            {
+                "id": str(path),
+                "name": path.name,
+                "mimeType": "application/vnd.google-apps.folder" if path.is_dir() else "",
+            }
+            for path in folder.iterdir()
+            if not name_prefix or path.name.startswith(name_prefix)
+        )
 
     def download(self, file_id: str) -> bytes:
         return Path(file_id).read_bytes()
