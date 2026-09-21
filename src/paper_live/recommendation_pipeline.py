@@ -90,6 +90,8 @@ class RecommendationPipeline:
         self.max_volatility = max_volatility
         self.portfolio = portfolio or PortfolioConfig()
         self.last_filter_stats: dict[str, int] = {"pit_eligible": 0, "latest_candidates": 0, "selected_candidates": 0, "filtered_history": 0, "filtered_volume": 0, "filtered_return": 0, "filtered_volatility": 0, "filtered_ohlc": 0}
+        self.last_filter_audit: list[dict[str, Any]] = []
+        self.last_filter_audit_manifest: DatasetManifest | None = None
 
     @staticmethod
     def _checksum(rows: Sequence[dict[str, Any]]) -> str:
@@ -146,11 +148,13 @@ class RecommendationPipeline:
 
     def _filter_candidates(self, candidates: Sequence[dict[str, Any]], *, history_counts: dict[tuple[str, str], int]) -> list[dict[str, Any]]:
         selected: list[dict[str, Any]] = []
+        audit: list[dict[str, Any]] = []
         stats = {"filtered_history": 0, "filtered_volume": 0, "filtered_return": 0, "filtered_volatility": 0, "filtered_ohlc": 0}
         for row in candidates:
             key = (str(row.get("market", "")), str(row.get("symbol", "")))
             if history_counts.get(key, 0) < self.min_history:
                 stats["filtered_history"] += 1
+                audit.append(self._filter_audit_row(row, "insufficient_history"))
                 continue
             volume_raw = row.get("volume")
             try:
@@ -159,6 +163,7 @@ class RecommendationPipeline:
                 volume_value = 0.0
             if not isfinite(volume_value) or volume_value < self.min_volume:
                 stats["filtered_volume"] += 1
+                audit.append(self._filter_audit_row(row, "invalid_or_low_volume"))
                 continue
             if row.get("return_1d") is not None:
                 try:
@@ -167,6 +172,7 @@ class RecommendationPipeline:
                     return_value = float("inf")
                 if not isfinite(return_value) or abs(return_value) > self.max_abs_return_1d:
                     stats["filtered_return"] += 1
+                    audit.append(self._filter_audit_row(row, "return_limit"))
                     continue
             if row.get("volatility") is not None:
                 try:
@@ -175,6 +181,7 @@ class RecommendationPipeline:
                     volatility_value = float("inf")
                 if not isfinite(volatility_value) or volatility_value > self.max_volatility:
                     stats["filtered_volatility"] += 1
+                    audit.append(self._filter_audit_row(row, "volatility_limit"))
                     continue
             try:
                 numeric = {key: (None if row.get(key) is None else float(str(row[key]))) for key in ("open", "high", "low", "close")}
@@ -187,11 +194,17 @@ class RecommendationPipeline:
             open_value, high_value, low_value, close_value = (numeric[key] for key in ("open", "high", "low", "close"))
             if close_value is None or close_value <= 0 or (high_value is not None and high_value < max(x for x in (open_value, close_value) if x is not None)) or (low_value is not None and low_value > min(x for x in (open_value, close_value) if x is not None)):
                 stats["filtered_ohlc"] += 1
+                audit.append(self._filter_audit_row(row, "invalid_ohlc"))
                 continue
             selected.append(row)
         self.last_filter_stats.update(stats)
+        self.last_filter_audit = audit
         self.last_filter_stats["selected_candidates"] = len(selected)
         return selected
+
+    @staticmethod
+    def _filter_audit_row(row: Mapping[str, Any], reason: str) -> dict[str, Any]:
+        return {"market": str(row.get("market", "")), "symbol": str(row.get("symbol", "")), "trade_date": row.get("trade_date"), "available_at": row.get("available_at"), "reason": reason}
 
     @staticmethod
     def _number(value: Any, default: float = 0.0) -> float:
@@ -273,7 +286,10 @@ class RecommendationPipeline:
         candidates = self._latest_candidates(features, decision_time=decision_time)
         self.last_filter_stats["latest_candidates"] = len(candidates)
         history_counts = self._history_counts(features, decision_time=decision_time)
-        factor_rows = [self._factorize(row) for row in self._filter_candidates(candidates, history_counts=history_counts)]
+        filtered_rows = self._filter_candidates(candidates, history_counts=history_counts)
+        filter_audit = [{**row, "decision_time": decision_time, "input_checksum_sha256": input_checksum} for row in self.last_filter_audit]
+        self.last_filter_audit_manifest = self.storage.write_snapshot("recommendations/daily_filter_audit", filter_audit, as_of=decision_time, schema_version="recommendation-filter-audit-v1")
+        factor_rows = [self._factorize(row) for row in filtered_rows]
         ranked = self.feature_service.rank(factor_rows, data_as_of=decision_time)
         selected_by_identity = {(str(row.get("market", "")), str(row.get("symbol", ""))): row for row in candidates}
         for row in ranked:
