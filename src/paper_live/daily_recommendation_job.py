@@ -130,7 +130,11 @@ class DailyRecommendationJob:
                 row_count=manifest.stage("recommendations").row_count,
                 checksum_sha256=manifest.stage("recommendations").checksum_sha256,
                 status=manifest.stage("recommendations").status,
-                metadata={"candidate_quality": dict(self.recommendations.last_filter_stats)},
+                metadata={
+                    "candidate_quality": dict(self.recommendations.last_filter_stats),
+                    "filter_audit_dataset": self.recommendations.last_filter_audit_manifest.dataset if self.recommendations.last_filter_audit_manifest else None,
+                    "filter_audit_checksum_sha256": self.recommendations.last_filter_audit_manifest.checksum_sha256 if self.recommendations.last_filter_audit_manifest else None,
+                },
             ))
             manifest = manifest.with_stage(RunArtifact(
                 stage="portfolio", row_count=len(selected), status="completed" if ranked else "not_run",
