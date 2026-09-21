@@ -95,3 +95,15 @@ def test_pit_validator_rejects_future_and_missing_rows():
     assert report.rejected_rows == 2
     assert report.rejected_future_timestamp == 1
     assert report.rejected_missing_timestamp == 1
+
+
+def test_quality_filter_audit_is_persisted_and_linkable(tmp_path):
+    storage = GoogleDriveStorageAgent(LocalDriveMirror(tmp_path), folder_id="datasets")
+    pipeline = RecommendationPipeline(storage=storage, min_history=2)
+    rows = [
+        {"market": "KRX", "symbol": "SHORT", "trade_date": "2026-08-28", "close": 90, "volume": 100, "available_at": "2026-08-28T18:00:00+09:00"},
+    ]
+    pipeline.build_from_daily(rows, decision_time="2026-08-28T19:00:00+09:00")
+    assert pipeline.last_filter_audit[0]["reason"] == "insufficient_history"
+    assert pipeline.last_filter_audit_manifest is not None
+    assert pipeline.last_filter_audit_manifest.row_count == 1
