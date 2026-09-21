@@ -187,9 +187,11 @@ class RecommendationPipeline:
                 numeric = {key: (None if row.get(key) is None else float(str(row[key]))) for key in ("open", "high", "low", "close")}
             except (TypeError, ValueError):
                 stats["filtered_ohlc"] += 1
+                audit.append(self._filter_audit_row(row, "invalid_ohlc"))
                 continue
             if any(value is not None and not isfinite(value) for value in numeric.values()):
                 stats["filtered_ohlc"] += 1
+                audit.append(self._filter_audit_row(row, "invalid_ohlc"))
                 continue
             open_value, high_value, low_value, close_value = (numeric[key] for key in ("open", "high", "low", "close"))
             if close_value is None or close_value <= 0 or (high_value is not None and high_value < max(x for x in (open_value, close_value) if x is not None)) or (low_value is not None and low_value > min(x for x in (open_value, close_value) if x is not None)):
