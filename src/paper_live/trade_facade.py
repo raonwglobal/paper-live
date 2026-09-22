@@ -1,7 +1,7 @@
 """Internal trade surface: Intent → Preview → Submit."""
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from decimal import ROUND_DOWN, Decimal
 from typing import Any
@@ -67,6 +67,19 @@ class PortfolioRevalidation:
     snapshot: PortfolioRiskSnapshot
     intent: OrderIntent | None
     preview: OrderPreview | None
+
+
+@dataclass(frozen=True)
+class PortfolioPreflightResult:
+    """Batch pre-trade result; no order is submitted by this operation."""
+
+    rows_checked: int
+    approved: tuple[PortfolioRevalidation, ...]
+    rejected: tuple[tuple[dict[str, Any], str], ...]
+
+    @property
+    def all_approved(self) -> bool:
+        return not self.rejected
 
 
 @dataclass
@@ -141,6 +154,38 @@ class InternalTradeFacade:
             return PortfolioRevalidation(snapshot=snapshot, intent=None, preview=None)
         preview = self.preview(intent, latest_price, portfolio_context=snapshot.context)
         return PortfolioRevalidation(snapshot=snapshot, intent=intent, preview=preview)
+
+    def preflight_portfolio(
+        self,
+        rows: Sequence[dict[str, Any]],
+        *,
+        account: PaperAccount,
+        latest_prices: Mapping[str, Decimal],
+        markets: Mapping[str, str] | None = None,
+        broker: str = "toss",
+        order_type: str = "MARKET",
+        lot_size: Decimal = Decimal("1"),
+    ) -> PortfolioPreflightResult:
+        """Revalidate every selected row before any batch execution is attempted."""
+        approved: list[PortfolioRevalidation] = []
+        rejected: list[tuple[dict[str, Any], str]] = []
+        for row in rows:
+            if not bool(row.get("portfolio_selected")):
+                continue
+            try:
+                result = self.revalidate_portfolio_row(
+                    row, account=account, latest_prices=latest_prices, markets=markets,
+                    broker=broker, order_type=order_type, lot_size=lot_size,
+                )
+                if result.intent is None or result.preview is None:
+                    continue
+                if not result.preview.risk.approved:
+                    rejected.append((dict(row), "; ".join(result.preview.risk.violations) or "risk rejected"))
+                    continue
+                approved.append(result)
+            except (PermissionError, ValueError, KeyError) as exc:
+                rejected.append((dict(row), str(exc)))
+        return PortfolioPreflightResult(len(rows), tuple(approved), tuple(rejected))
 
     def submit_portfolio_row_revalidated(self, row: dict[str, Any], *, account: PaperAccount, latest_prices: Mapping[str, Decimal], markets: Mapping[str, str] | None = None, broker: str = "toss", order_type: str = "MARKET", lot_size: Decimal = Decimal("1"), approval_id: str | None = None, recommendation_run_id: str | None = None, portfolio_rank: int | None = None, run_manifest_id: str | None = None) -> Fill | OrderResult | None:
         """Revalidate immediately before submission; never reuse a stale preview."""
