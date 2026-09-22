@@ -165,6 +165,8 @@ class InternalTradeFacade:
         broker: str = "toss",
         order_type: str = "MARKET",
         lot_size: Decimal = Decimal("1"),
+        recommendation_run_id: str | None = None,
+        run_manifest_id: str | None = None,
     ) -> PortfolioPreflightResult:
         """Revalidate every selected row before any batch execution is attempted."""
         approved: list[PortfolioRevalidation] = []
@@ -185,7 +187,13 @@ class InternalTradeFacade:
                 approved.append(result)
             except (PermissionError, ValueError, KeyError) as exc:
                 rejected.append((dict(row), str(exc)))
-        return PortfolioPreflightResult(len(rows), tuple(approved), tuple(rejected))
+        result = PortfolioPreflightResult(len(rows), tuple(approved), tuple(rejected))
+        if self.audit_trail is not None:
+            self.audit_trail.record_preflight(
+                tuple(rows), result,
+                run_manifest_id=run_manifest_id or recommendation_run_id,
+            )
+        return result
 
     def submit_portfolio_row_revalidated(self, row: dict[str, Any], *, account: PaperAccount, latest_prices: Mapping[str, Decimal], markets: Mapping[str, str] | None = None, broker: str = "toss", order_type: str = "MARKET", lot_size: Decimal = Decimal("1"), approval_id: str | None = None, recommendation_run_id: str | None = None, portfolio_rank: int | None = None, run_manifest_id: str | None = None) -> Fill | OrderResult | None:
         """Revalidate immediately before submission; never reuse a stale preview."""
