@@ -19,8 +19,8 @@ from .ingestion_retry import IngestionRetryService, RetryReport
 from .ingestion_run import FailureQueue, IngestionFailure, IngestionRunLedger, IngestionRunManifest
 from .internal_api import InternalApiApp, create_internal_server, serve_internal_api
 from .orchestrator import StateGraph, build_analysis_graph
-from .portfolio_risk import PortfolioRiskContextBuilder, PortfolioRiskSnapshot, PositionValuation
 from .paper_execution import PaperExecutionOrchestrator, PaperExecutionResult
+from .portfolio_risk import PortfolioRiskContextBuilder, PortfolioRiskSnapshot, PositionValuation
 from .recommendation_pipeline import PitValidationReport, PointInTimeValidator, RecommendationPipeline
 from .reflection import EpisodicMemory, SelfReflectionWorker, TradeEpisode
 from .risk import PortfolioRiskContext, RiskGuardian, RiskLimits
