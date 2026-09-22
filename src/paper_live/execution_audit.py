@@ -137,7 +137,9 @@ class ExecutionAuditTrail:
                 reference_price = str(row.get("close", row.get("price", "0")))
                 risk_violations = (reason or "preflight rejected",)
                 risk_level = "REJECT"
-                account_value = portfolio_notional = market_notional = None
+                account_value = None
+                portfolio_notional = None
+                market_notional = None
                 market = str(row.get("market", ""))
                 client_order_id = broker = ""
             payload = {
