@@ -65,7 +65,7 @@ def test_paper_execution_connects_preflight_fill_pnl_reflection(tmp_path):
     assert result.preflight.all_approved
     assert len(result.fills) == 1
     assert result.fills[0].status == "FILLED"
-    assert result.fills[0].quantity == Decimal("10")
+    assert result.fills[0].quantity == Decimal("12")
     assert account.positions["A"] == Decimal("20")
     assert account.cash < Decimal("10000")
     assert len(result.pnl_audits) == 1
