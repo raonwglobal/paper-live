@@ -54,7 +54,6 @@ class DailyRecommendationJob:
                   recommendation_manifest: DatasetManifest | None = None):
         selected = [row for row in ranked if bool(row.get("portfolio_selected"))]
         target_weight_sum = sum(float(row.get("target_weight", 0.0)) for row in selected)
-        portfolio = None
         return selected, target_weight_sum, build_run_manifest_v3(
             run_id=ingestion.manifest.run_id,
             status=ingestion.manifest.status,
@@ -88,8 +87,8 @@ class DailyRecommendationJob:
                                   status="completed" if ranked else "not_run",
                                   metadata={"selected_count": len(selected),
                                             "target_weight_sum": round(target_weight_sum, 6), "config": {}}),
-            risk=RunArtifact(stage="risk", status="not_run", metadata={"gated": True}),
-            execution_audit=RunArtifact(stage="execution_audit", status="not_run", metadata={"paper_only": True}),
+            risk=RunArtifact(stage="risk", status="not_run", metadata={"preflight_required": True}),
+            execution_audit=RunArtifact(stage="execution_audit", status="not_run", metadata={"submission_disabled": True}),
             fill=RunArtifact(stage="fill", status="not_run"),
             pnl=RunArtifact(stage="pnl", status="not_run"),
             reflection=RunArtifact(stage="reflection", status="not_run"),
