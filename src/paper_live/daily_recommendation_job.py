@@ -3,9 +3,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 
 from .data_lake import DatasetManifest, GoogleDriveStorageAgent
+from .execution import PaperAccount
 from .execution_audit import ExecutionAuditTrail
+from .paper_execution import PaperExecutionOrchestrator, PaperExecutionResult
 from .ingestion_pipeline import IngestionPipeline, IngestionPipelineResult
 from .ingestion_run import IngestionRunLedger
 from .market_dataset import DailyDatasetBuilder, DailyPriceProvider
@@ -21,6 +24,7 @@ class DailyRecommendationJobResult:
     feature_manifest: DatasetManifest | None
     recommendation_manifest: DatasetManifest | None
     run_artifact_id: str | None
+    paper_execution: PaperExecutionResult | None = None
 
 
 class DailyRecommendationJob:
@@ -32,10 +36,14 @@ class DailyRecommendationJob:
                  max_retries: int = 3, backoff_seconds: float = 1.0, sleeper=None,
                  recommendation_pipeline: RecommendationPipeline | None = None,
                  manifest_tracker: RunManifestTracker | None = None,
-                 audit_trail: ExecutionAuditTrail | None = None) -> None:
+                 audit_trail: ExecutionAuditTrail | None = None,
+                 paper_execution: PaperExecutionOrchestrator | None = None,
+                 paper_account: PaperAccount | None = None) -> None:
         self.storage = storage
         self.manifest_tracker = manifest_tracker or RunManifestTracker(writer=storage)
         self.audit_trail = audit_trail
+        self.paper_execution = paper_execution
+        self.paper_account = paper_account
         if self.audit_trail is not None and self.audit_trail.manifest_tracker is None:
             self.audit_trail.manifest_tracker = self.manifest_tracker
         if self.audit_trail is not None and self.audit_trail.writer is None:
@@ -149,10 +157,30 @@ class DailyRecommendationJob:
                 },
             ))
             self.manifest_tracker.register(manifest, persist=False)
+
+            paper_result = None
+            if self.paper_execution is not None and self.paper_account is not None and selected:
+                latest_prices = {
+                    str(row["symbol"]): Decimal(str(row.get("close", row.get("price", "0"))))
+                    for row in selected
+                }
+                markets = {
+                    str(row["symbol"]): str(row.get("market", ""))
+                    for row in selected
+                    if row.get("market") is not None
+                }
+                paper_result = self.paper_execution.execute(
+                    selected,
+                    account=self.paper_account,
+                    latest_prices=latest_prices,
+                    markets=markets or None,
+                    run_manifest_id=ingestion.manifest.run_id,
+                )
+
             audit_uri = self._persist_audit(ingestion.manifest.run_id)
             final = self.manifest_tracker.finalize(ingestion.manifest.run_id, status="completed", audit_uri=audit_uri)
             return DailyRecommendationJobResult(
-                ingestion, ranked, feature_manifest, recommendation_manifest, final.manifest_uri
+                ingestion, ranked, feature_manifest, recommendation_manifest, final.manifest_uri, paper_result
             )
         except Exception:
             # Commit-last semantics: a failed run is made visible after any in-memory/audit work above fails.
