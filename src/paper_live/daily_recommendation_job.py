@@ -44,6 +44,11 @@ class DailyRecommendationJob:
         self.audit_trail = audit_trail
         self.paper_execution = paper_execution
         self.paper_account = paper_account
+        if self.paper_execution is not None:
+            if self.paper_execution.manifest_tracker is None:
+                self.paper_execution.manifest_tracker = self.manifest_tracker
+            if self.paper_execution.storage is None:
+                self.paper_execution.storage = storage
         if self.audit_trail is not None and self.audit_trail.manifest_tracker is None:
             self.audit_trail.manifest_tracker = self.manifest_tracker
         if self.audit_trail is not None and self.audit_trail.writer is None:
@@ -175,6 +180,7 @@ class DailyRecommendationJob:
                     latest_prices=latest_prices,
                     markets=markets or None,
                     run_manifest_id=ingestion.manifest.run_id,
+                    trade_date=decision_time[:10],
                 )
 
             audit_uri = self._persist_audit(ingestion.manifest.run_id)
