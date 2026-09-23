@@ -284,6 +284,76 @@ class GoogleDriveStorageAgent:
         self.client.upload("manifest.json", json.dumps(asdict(manifest), ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8"), folder_id=index_folder, mime_type="application/json")
         return manifest
 
+    def _run_stage_folder(self, run_id: str, stage: str, trade_date: str) -> str:
+        current: str | None = self.folder_id
+        for part in ("runs", run_id, "execution", stage, f"trade_date={trade_date}"):
+            current = self.client.ensure_folder(part, parent_id=current)
+        assert current is not None
+        return current
+
+    def write_run_stage_jsonl(
+        self,
+        run_id: str,
+        stage: str,
+        trade_date: str,
+        rows: Sequence[dict[str, Any]],
+        *,
+        schema_version: str = "1.0",
+        source: str | None = None,
+    ) -> DatasetManifest:
+        """Persist a deterministic, idempotent run-scoped execution artifact."""
+        if not run_id.strip():
+            raise ValueError("run_id is required")
+        if not stage.strip():
+            raise ValueError("stage is required")
+        normalized_date = self._validate_trade_date(trade_date)
+        normalized_rows = sorted(
+            (dict(row) for row in rows),
+            key=lambda row: (
+                str(row.get("event_key", "")),
+                str(row.get("symbol", "")),
+                str(row.get("client_order_id", "")),
+                str(row.get("audit_id", "")),
+                str(row.get("episode_id", "")),
+            ),
+        )
+        payload = b"".join(
+            json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
+            for row in normalized_rows
+        )
+        checksum = self._checksum(payload)
+        folder = self._run_stage_folder(run_id, stage, normalized_date)
+        file_id = self.client.upload(
+            f"{stage}.jsonl", payload, folder_id=folder, mime_type="application/x-ndjson"
+        )
+        manifest_payload = {
+            "run_id": run_id,
+            "stage": stage,
+            "trade_date": normalized_date,
+            "row_count": len(normalized_rows),
+            "checksum_sha256": checksum,
+            "schema_version": schema_version,
+            "source": source or self.source,
+            "artifact_id": file_id,
+        }
+        self.client.upload(
+            "manifest.json",
+            json.dumps(manifest_payload, ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8"),
+            folder_id=folder,
+            mime_type="application/json",
+        )
+        return DatasetManifest(
+            dataset=f"runs/{run_id}/execution/{stage}",
+            as_of=normalized_date,
+            row_count=len(normalized_rows),
+            schema_version=schema_version,
+            source=source or self.source,
+            checksum_sha256=checksum,
+            run_id=run_id,
+            partition_count=1,
+            partition_keys=(normalized_date,),
+        )
+
     def write_snapshot(self, dataset: str, rows: Sequence[dict[str, Any]], *, as_of: str, schema_version: str = "1.0", run_id: str | None = None, success_count: int = 0, failure_count: int = 0, source: str | None = None) -> DatasetManifest:
         return self.write_jsonl(dataset, rows, as_of=as_of, schema_version=schema_version, run_id=run_id, success_count=success_count, failure_count=failure_count, source=source)
 
