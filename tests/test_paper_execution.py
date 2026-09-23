@@ -66,14 +66,14 @@ def test_paper_execution_connects_preflight_fill_pnl_reflection(tmp_path):
     assert len(result.fills) == 1
     assert result.fills[0].status == "FILLED"
     assert result.fills[0].quantity == Decimal("12")
-    assert account.positions["A"] == Decimal("20")
+    assert account.positions["A"] == Decimal("22")
     assert account.cash < Decimal("10000")
     assert len(result.pnl_audits) == 1
     assert len(result.reflection_episodes) == 1
 
     record = audit.get(result.pnl_audits[0])
     assert record is not None
-    assert record.fill_quantity == "10"
+    assert record.fill_quantity == "12"
     assert record.pnl is not None
     assert record.reflection_episode_id == result.reflection_episodes[0]
 
