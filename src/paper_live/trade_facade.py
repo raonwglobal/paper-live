@@ -175,25 +175,25 @@ class InternalTradeFacade:
             if not bool(row.get("portfolio_selected")):
                 continue
             try:
-                result = self.revalidate_portfolio_row(
+                revalidation = self.revalidate_portfolio_row(
                     row, account=account, latest_prices=latest_prices, markets=markets,
                     broker=broker, order_type=order_type, lot_size=lot_size,
                 )
-                if result.intent is None or result.preview is None:
+                if revalidation.intent is None or revalidation.preview is None:
                     continue
-                if not result.preview.risk.approved:
-                    rejected.append((dict(row), "; ".join(result.preview.risk.violations) or "risk rejected"))
+                if not revalidation.preview.risk.approved:
+                    rejected.append((dict(row), "; ".join(revalidation.preview.risk.violations) or "risk rejected"))
                     continue
-                approved.append(result)
+                approved.append(revalidation)
             except (PermissionError, ValueError, KeyError) as exc:
                 rejected.append((dict(row), str(exc)))
-        result = PortfolioPreflightResult(len(rows), tuple(approved), tuple(rejected))
+        preflight_result = PortfolioPreflightResult(len(rows), tuple(approved), tuple(rejected))
         if self.audit_trail is not None:
             self.audit_trail.record_preflight(
-                tuple(rows), result,
+                tuple(rows), preflight_result,
                 run_manifest_id=run_manifest_id or recommendation_run_id,
             )
-        return result
+        return preflight_result
 
     def submit_portfolio_row_revalidated(self, row: dict[str, Any], *, account: PaperAccount, latest_prices: Mapping[str, Decimal], markets: Mapping[str, str] | None = None, broker: str = "toss", order_type: str = "MARKET", lot_size: Decimal = Decimal("1"), approval_id: str | None = None, recommendation_run_id: str | None = None, portfolio_rank: int | None = None, run_manifest_id: str | None = None) -> Fill | OrderResult | None:
         """Revalidate immediately before submission; never reuse a stale preview."""
