@@ -85,7 +85,7 @@ def test_paper_execution_connects_preflight_fill_pnl_reflection(tmp_path):
     manifest = tracker.get(run_id)
     assert manifest is not None
     assert manifest.stage("risk").status == "completed"
-    assert manifest.stage("fill").status == "FILLED"
+    assert manifest.stage("fill").status == "completed"
     assert manifest.stage("pnl").status == "COMPLETED"
     assert manifest.stage("reflection").status == "COMPLETED"
     assert (tmp_path / "drive" / "root" / "runs" / run_id / "execution" / "fills" / "trade_date=2026-09-22" / "fills.jsonl").exists()
