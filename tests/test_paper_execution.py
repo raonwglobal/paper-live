@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from paper_live.data_lake import GoogleDriveStorageAgent, LocalDriveMirror
 from paper_live.environment import EnvironmentController, ExecutionEnvironmentMode
 from paper_live.execution import ExecutionGateway, PaperAccount, VirtualMatchingEngine
 from paper_live.execution_audit import ExecutionAuditTrail
@@ -38,8 +39,11 @@ def test_paper_execution_connects_preflight_fill_pnl_reflection(tmp_path):
         risk=RiskGuardian(controller, account),
         gateway=ExecutionGateway(controller, VirtualMatchingEngine(account)),
         audit_trail=audit,
+        manifest_tracker=tracker,
+        storage=storage,
     )
     reflection = SelfReflectionWorker(EpisodicMemory(tmp_path / "episodes.jsonl"))
+    storage = GoogleDriveStorageAgent(LocalDriveMirror(tmp_path / "drive"))
     orchestrator = PaperExecutionOrchestrator(
         facade=facade,
         reflection_worker=reflection,
@@ -60,6 +64,7 @@ def test_paper_execution_connects_preflight_fill_pnl_reflection(tmp_path):
         latest_prices={"A": Decimal("100")},
         markets={"A": "KRX"},
         run_manifest_id=run_id,
+        trade_date="2026-09-22",
     )
 
     assert result.preflight.all_approved
@@ -83,3 +88,6 @@ def test_paper_execution_connects_preflight_fill_pnl_reflection(tmp_path):
     assert manifest.stage("fill").status == "FILLED"
     assert manifest.stage("pnl").status == "COMPLETED"
     assert manifest.stage("reflection").status == "COMPLETED"
+    assert (tmp_path / "drive" / "root" / "runs" / run_id / "execution" / "fills" / "trade_date=2026-09-22" / "fills.jsonl").exists()
+    assert (tmp_path / "drive" / "root" / "runs" / run_id / "execution" / "pnl" / "trade_date=2026-09-22" / "pnl.jsonl").exists()
+    assert (tmp_path / "drive" / "root" / "runs" / run_id / "execution" / "reflection" / "trade_date=2026-09-22" / "reflection.jsonl").exists()
