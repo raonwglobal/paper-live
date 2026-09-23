@@ -39,8 +39,6 @@ def test_paper_execution_connects_preflight_fill_pnl_reflection(tmp_path):
         risk=RiskGuardian(controller, account),
         gateway=ExecutionGateway(controller, VirtualMatchingEngine(account)),
         audit_trail=audit,
-        manifest_tracker=tracker,
-        storage=storage,
     )
     reflection = SelfReflectionWorker(EpisodicMemory(tmp_path / "episodes.jsonl"))
     storage = GoogleDriveStorageAgent(LocalDriveMirror(tmp_path / "drive"))
@@ -48,6 +46,8 @@ def test_paper_execution_connects_preflight_fill_pnl_reflection(tmp_path):
         facade=facade,
         reflection_worker=reflection,
         audit_trail=audit,
+        manifest_tracker=tracker,
+        storage=storage,
     )
 
     rows = [{
