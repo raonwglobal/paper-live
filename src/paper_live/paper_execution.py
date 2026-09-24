@@ -6,9 +6,9 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
+from .data_lake import GoogleDriveStorageAgent
 from .execution import Fill, PaperAccount
 from .execution_audit import ExecutionAuditTrail
-from .data_lake import GoogleDriveStorageAgent
 from .pnl import PortfolioLedger, Side
 from .reflection import SelfReflectionWorker, TradeEpisode
 from .run_manifest import RunArtifact, RunManifestTracker
@@ -57,9 +57,10 @@ class PaperExecutionOrchestrator:
             rows,
             schema_version=f"execution-{stage}-v1",
         )
+        manifest_stage = {"fills": "fill", "pnl": "pnl", "reflection": "reflection"}.get(stage, stage)
         self._bind_stage(
             run_id,
-            stage,
+            manifest_stage,
             status="completed",
             artifact_id=f"{run_id}:{stage}:{trade_date}:{manifest.checksum_sha256[:20]}",
             row_count=manifest.row_count,
