@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from .execution import Fill, PaperAccount
 from .execution_audit import ExecutionAuditTrail
+from .data_lake import GoogleDriveStorageAgent
 from .pnl import PortfolioLedger, Side
 from .reflection import SelfReflectionWorker, TradeEpisode
 from .run_manifest import RunArtifact, RunManifestTracker
@@ -29,6 +30,7 @@ class PaperExecutionOrchestrator:
     reflection_worker: SelfReflectionWorker | None = None
     audit_trail: ExecutionAuditTrail | None = None
     manifest_tracker: RunManifestTracker | None = None
+    storage: GoogleDriveStorageAgent | None = None
 
     def _tracker(self, audit: ExecutionAuditTrail | None) -> RunManifestTracker | None:
         return self.manifest_tracker or (audit.manifest_tracker if audit is not None else None)
