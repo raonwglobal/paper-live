@@ -16,14 +16,14 @@ class Builder:
         self.rows = []
         self.calls = []
 
-    def build(self, rows, *, as_of, dataset="market/daily_prices"):
+    def build(self, rows, *, as_of, dataset="market/daily_prices", run_id=None):
         rows = tuple(rows)
         self.rows.extend(rows)
         self.calls.append((rows, as_of, dataset))
         return type("Manifest", (), {"dataset": dataset, "checksum_sha256": "test"})()
 
 
-def test_retry_resolves_and_publishes_recovered_rows():
+def test_retry_resolves_and_publishes_recovered_rows_to_recovery_dataset():
     provider = Provider()
     builder = Builder()
     queue = FailureQueue([
@@ -38,8 +38,9 @@ def test_retry_resolves_and_publishes_recovered_rows():
     assert report.remaining == 0
     assert provider.calls == 1
     assert len(report.rows) == 1
-    assert report.dataset_manifest.dataset == "market/daily_prices"
+    assert report.dataset_manifest.dataset == IngestionRetryService.RECOVERY_DATASET
     assert builder.calls[0][1] == "2026-08-28T16:00:00+00:00"
+    assert builder.calls[0][2] == IngestionRetryService.RECOVERY_DATASET
 
 
 def test_retry_stops_at_max_attempts():
@@ -61,3 +62,42 @@ def test_retry_stops_at_max_attempts():
     assert failure.attempts == 2
     assert failure.retryable is False
     assert builder.calls == []
+
+
+def test_retry_reconcile_republishes_merged_canonical_snapshot():
+    provider = Provider()
+    builder = Builder()
+    service = IngestionRetryService(
+        lambda market: provider, builder, max_attempts=2, sleeper=lambda _: None
+    )
+    from paper_live.market_dataset import DailyPriceRecord
+
+    canonical = (
+        DailyPriceRecord(
+            "000001", "KRX", "2026-08-28", 1, 1, 1, 100, 10,
+            source="canonical", available_at="2026-08-28T18:00:00+00:00",
+        ),
+    )
+    recovery = (
+        DailyPriceRecord(
+            "000001", "KRX", "2026-08-28", 1, 1, 1, 999, 10,
+            source="retry", available_at="2026-08-29T00:00:00+00:00",
+        ),
+        DailyPriceRecord(
+            "000002", "KRX", "2026-08-28", 1, 1, 1, 101, 11,
+            source="retry", available_at="2026-08-29T00:00:00+00:00",
+        ),
+    )
+
+    report, manifest = service.reconcile(
+        canonical,
+        recovery,
+        as_of="2026-08-29T01:00:00+00:00",
+    )
+
+    assert report.added_rows == 1
+    assert report.duplicate_recovery_rows == 1
+    assert manifest.dataset == "market/daily_prices"
+    merged_rows = builder.calls[-1][0]
+    assert [item.symbol for item in merged_rows] == ["000001", "000002"]
+    assert merged_rows[0].close == 100
