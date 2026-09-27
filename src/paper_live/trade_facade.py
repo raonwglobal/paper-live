@@ -8,7 +8,7 @@ only through SecretBroker (optionally backed by GoogleDriveSecretStore).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from decimal import Decimal, ROUND_DOWN
+from decimal import ROUND_DOWN, Decimal
 from typing import Any
 from uuid import uuid4
 
