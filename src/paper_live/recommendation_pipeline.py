@@ -117,7 +117,8 @@ class RecommendationPipeline:
                 stats["filtered_history"] += 1
                 continue
             try:
-                volume_value = float(row.get("volume"))
+                volume_raw: Any = row.get("volume")
+                volume_value = float(volume_raw)
             except (TypeError, ValueError):
                 volume_value = 0.0
             if not isfinite(volume_value) or volume_value < self.min_volume:
@@ -125,7 +126,8 @@ class RecommendationPipeline:
                 continue
             if row.get("return_1d") is not None:
                 try:
-                    return_value = float(row["return_1d"])
+                    return_raw: Any = row.get("return_1d")
+                    return_value = float(return_raw)
                 except (TypeError, ValueError):
                     return_value = float("inf")
                 if not isfinite(return_value) or abs(return_value) > self.max_abs_return_1d:
@@ -133,7 +135,8 @@ class RecommendationPipeline:
                     continue
             if row.get("volatility") is not None:
                 try:
-                    volatility_value = float(row["volatility"])
+                    volatility_raw: Any = row.get("volatility")
+                    volatility_value = float(volatility_raw)
                 except (TypeError, ValueError):
                     volatility_value = float("inf")
                 if not isfinite(volatility_value) or volatility_value > self.max_volatility:
@@ -186,7 +189,7 @@ class RecommendationPipeline:
         if not total:
             return [dict(row) for row in ranked]
         weights = [value / total for value in raw_weights]
-        for row, weight, position in zip(selected, weights, range(1, len(selected) + 1)):
+        for row, weight, position in zip(selected, weights, range(1, len(selected) + 1), strict=True):
             row["portfolio_selected"] = True
             row["portfolio_rank"] = position
             row["target_weight"] = round(min(weight, self.portfolio.max_weight), 6)
