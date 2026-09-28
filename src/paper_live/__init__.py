@@ -18,6 +18,7 @@ from .ingestion_reconcile import ReconciliationReport, RecoveryReconciler
 from .ingestion_retry import IngestionRetryService, RetryReport
 from .ingestion_run import FailureQueue, IngestionFailure, IngestionRunLedger, IngestionRunManifest
 from .internal_api import InternalApiApp, create_internal_server, serve_internal_api
+from .operations import OperationalDailyRunner, OperationalRunReport
 from .orchestrator import StateGraph, build_analysis_graph
 from .paper_execution import PaperExecutionOrchestrator, PaperExecutionResult
 from .portfolio_risk import PortfolioRiskContextBuilder, PortfolioRiskSnapshot, PositionValuation
@@ -40,7 +41,7 @@ __all__ = [
     "ExecutionAuditRecord", "ExecutionAuditTrail",
     "OHLCV", "ScreenRule", "sma", "ema", "rsi", "screen", "sharpe_ratio", "max_drawdown", "BacktestResult",
     "BacktestRunner", "EpisodicMemory", "SelfReflectionWorker", "TradeEpisode", "StateGraph", "build_analysis_graph",
-    "InternalTradeFacade", "OrderIntent", "OrderPreview", "PortfolioRevalidation", "RiskAssessment", "PaperExecutionOrchestrator", "PaperExecutionResult", "InternalApiApp", "create_internal_server",
+    "OperationalDailyRunner", "OperationalRunReport", "InternalTradeFacade", "OrderIntent", "OrderPreview", "PortfolioRevalidation", "RiskAssessment", "PaperExecutionOrchestrator", "PaperExecutionResult", "InternalApiApp", "create_internal_server",
     "serve_internal_api", "IngestionPipeline", "IngestionPipelineResult", "IngestionRetryService", "RetryReport",
     "FailureQueue", "IngestionFailure", "IngestionRunLedger", "IngestionRunManifest", "RecoveryReconciler", "ReconciliationReport", "RecommendationPipeline",
     "PitValidationReport", "PointInTimeValidator",
