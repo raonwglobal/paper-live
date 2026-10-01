@@ -77,6 +77,9 @@ def test_collect_records_symbol_failure_and_continues():
     [
         {"trade_date": "2026-10-01", "close": 1},
         {"trade_date": "2026-09-30", "close": -1},
+        {"trade_date": "2026-09-30", "close": float("nan")},
+        {"trade_date": "2026-09-30", "close": float("inf")},
+        {"trade_date": "2026-09-30", "close": True},
     ],
 )
 def test_invalid_provider_rows_fail_closed(row):
