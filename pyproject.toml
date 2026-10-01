@@ -15,7 +15,7 @@ operations = ["redis>=5,<7"]
 yfinance = ["yfinance>=0.2.40,<1"]
 
 [project.scripts]
-paper-live-daily = "paper_live.operational_cli:main"
+paper-live-daily = "paper_live.operational_cli:main"\npaper-live-collect = "paper_live.market_data_cli:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
