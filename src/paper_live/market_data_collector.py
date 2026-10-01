@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -103,6 +104,11 @@ class DailyMarketDataCollector:
         )
         for field in ("open", "high", "low", "close", "adjusted_close", "volume"):
             value = row.get(field)
-            if value is not None and (not isinstance(value, (int, float)) or value < 0):
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value < 0
+            ):
                 raise ValueError(f"invalid {field} value")
         return row
