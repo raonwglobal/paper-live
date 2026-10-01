@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+import math
 from datetime import date
 from typing import Any, Callable
-
-import pandas as pd
 
 
 class YFinanceDailyPriceProvider:
@@ -42,8 +41,7 @@ class YFinanceDailyPriceProvider:
         frame = self._download(ticker, start_date, date.fromordinal(end_date.toordinal() + 1))
         if frame is None or frame.empty:
             return ()
-        # yfinance may return MultiIndex columns even for a single ticker.
-        if isinstance(frame.columns, pd.MultiIndex):
+        if getattr(frame.columns, "nlevels", 1) > 1:
             frame.columns = frame.columns.get_level_values(0)
         rows: list[dict[str, Any]] = []
         for index, record in frame.iterrows():
@@ -63,6 +61,7 @@ class YFinanceDailyPriceProvider:
     @staticmethod
     def _value(record: Any, key: str) -> float | None:
         value = record.get(key)
-        if value is None or pd.isna(value):
+        if value is None:
             return None
-        return float(value)
+        number = float(value)
+        return None if math.isnan(number) else number
