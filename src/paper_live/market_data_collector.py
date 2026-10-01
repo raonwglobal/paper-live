@@ -58,9 +58,9 @@ class DailyMarketDataCollector:
         providers: dict[str, DailyPriceProvider] = {}
         for security in securities:
             try:
-                provider = providers.setdefault(
-                    security.market, self.provider_factory(security.market)
-                )
+                if security.market not in providers:
+                    providers[security.market] = self.provider_factory(security.market)
+                provider = providers[security.market]
                 rows = provider.fetch_daily_prices(security.symbol, start_date, end_date)
                 for raw in rows:
                     row = self._normalize(raw, security, start_date, end_date)
