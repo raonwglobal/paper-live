@@ -12,6 +12,7 @@ dependencies = ["langgraph>=0.6,<1", "PyYAML>=6.0,<7", "cryptography>=43,<46"]
 [project.optional-dependencies]
 test = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6", "mypy>=1.11"]
 operations = ["redis>=5,<7"]
+yfinance = ["yfinance>=0.2.40,<1"]
 
 [project.scripts]
 paper-live-daily = "paper_live.operational_cli:main"
