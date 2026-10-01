@@ -7,7 +7,7 @@ import uuid
 from datetime import date
 from pathlib import Path
 
-from .data_lake import GoogleDriveApiClient, GoogleDriveStorageAgent, LocalDriveMirror
+from .data_lake import DriveClient, GoogleDriveApiClient, GoogleDriveStorageAgent, LocalDriveMirror
 from .market_data_collector import DailyMarketDataCollector
 from .universe import Security, SecurityMaster
 from .yfinance_provider import YFinanceDailyPriceProvider
@@ -47,6 +47,7 @@ def main() -> int:
         parser.error("--end-date must be on or after --start-date")
 
     universe = _load_universe(args.universe)
+    client: DriveClient
     if args.storage == "local":
         client = LocalDriveMirror(args.local_dir)
     else:
