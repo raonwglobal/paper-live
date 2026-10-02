@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import uuid
 from datetime import date
@@ -42,6 +43,8 @@ def main() -> int:
     parser.add_argument("--storage", choices=("drive", "local"), default="drive")
     parser.add_argument("--local-dir", default="./paper-live-data")
     parser.add_argument("--drive-folder-id", default=os.getenv("GOOGLE_DRIVE_DATA_FOLDER_ID"))
+    parser.add_argument("--report-json", default=None, help="Write a machine-readable run summary")
+    parser.add_argument("--report-csv", default=None, help="Write per-symbol failures as CSV")
     args = parser.parse_args()
     if args.end_date < args.start_date:
         parser.error("--end-date must be on or after --start-date")
@@ -70,6 +73,37 @@ def main() -> int:
     )
     for market, symbol, error in report.failures:
         print(f"failed market={market} symbol={symbol} error={error}")
+
+    if args.report_json:
+        report_path = Path(args.report_json)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "run_id": report.manifest.run_id,
+            "dataset": args.dataset,
+            "start_date": args.start_date.isoformat(),
+            "end_date": args.end_date.isoformat(),
+            "storage": args.storage,
+            "row_count": report.manifest.row_count,
+            "requested": report.requested,
+            "succeeded": report.succeeded,
+            "failed": report.failed,
+            "failures": [
+                {"market": market, "symbol": symbol, "error": error}
+                for market, symbol, error in report.failures
+            ],
+        }
+        report_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+
+    if args.report_csv:
+        report_path = Path(args.report_csv)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        with report_path.open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=("market", "symbol", "error"))
+            writer.writeheader()
+            writer.writerows(
+                {"market": market, "symbol": symbol, "error": error}
+                for market, symbol, error in report.failures
+            )
     return 0 if report.failed == 0 else 1
 
 
