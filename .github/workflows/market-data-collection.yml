@@ -112,9 +112,12 @@ jobs:
       - name: Publish collection summary
         if: always() && hashFiles('reports/collection-summary.json') != ''
         shell: bash
+        env:
+          GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
         run: |
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
           report = json.loads(Path("reports/collection-summary.json").read_text(encoding="utf-8"))
           status = "PASS" if report["failed"] == 0 else "PARTIAL"
@@ -126,7 +129,7 @@ jobs:
               f"- Rows archived: {report['row_count']}",
               f"- Securities: {report['succeeded']}/{report['requested']} succeeded; {report['failed']} failed",
           ]
-          Path("$GITHUB_STEP_SUMMARY").write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+          Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\\n".join(lines) + "\\n", encoding="utf-8")
           PY
 
       - name: Upload collection reports
