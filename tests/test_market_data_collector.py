@@ -41,6 +41,8 @@ def test_collect_enriches_rows_and_uses_one_provider_per_market():
 
     assert report.requested == report.succeeded == 1
     assert report.failed == 0
+    assert report.quality.passed
+    assert report.quality.row_count == 1
     dataset, partitions, metadata = storage.calls[0]
     assert dataset == "market/daily-prices"
     assert partitions["2026-09-30"][0]["name"] == "Samsung"
@@ -100,3 +102,20 @@ def test_rejects_reversed_date_range():
     collector = DailyMarketDataCollector(SecurityMaster(), lambda _: Provider(()), Storage())
     with pytest.raises(ValueError, match="end_date"):
         collector.collect(date(2026, 10, 2), date(2026, 10, 1))
+
+
+
+def test_collect_reports_duplicate_rows_in_quality_metrics():
+    day = date(2026, 9, 30)
+    duplicate = {"symbol": "X", "trade_date": "2026-09-30", "close": 10}
+    collector = DailyMarketDataCollector(
+        SecurityMaster([Security("X", "Example", "US", "USD")]),
+        lambda _: Provider((duplicate, duplicate)),
+        Storage(),
+    )
+
+    report = collector.collect(day, day)
+
+    assert report.quality.row_count == 2
+    assert report.quality.duplicate_count == 1
+    assert not report.quality.passed
