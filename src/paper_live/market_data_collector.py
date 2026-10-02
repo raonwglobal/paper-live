@@ -8,6 +8,7 @@ from datetime import date
 from typing import Any, Protocol
 
 from .data_lake import DatasetManifest, GoogleDriveStorageAgent
+from .data_quality import DataQualityReport, validate_daily_rows
 from .universe import Security, SecurityMaster
 
 
@@ -22,6 +23,7 @@ class CollectionReport:
     succeeded: int
     failed: int
     failures: tuple[tuple[str, str, str], ...]
+    quality: DataQualityReport
 
 
 class DailyMarketDataCollector:
@@ -69,6 +71,8 @@ class DailyMarketDataCollector:
                 succeeded += 1
             except Exception as exc:
                 failures.append((security.market, security.symbol, type(exc).__name__))
+        all_rows = [row for partition in partitions.values() for row in partition]
+        quality = validate_daily_rows(all_rows, start_date=start_date, end_date=end_date)
         effective_as_of = as_of or end_date.isoformat()
         manifest = self.storage.write_partitioned_jsonl(
             self.dataset,
@@ -79,7 +83,7 @@ class DailyMarketDataCollector:
             failure_count=len(failures),
             source="paper-live-daily-collector",
         )
-        return CollectionReport(manifest, len(securities), succeeded, len(failures), tuple(failures))
+        return CollectionReport(manifest, len(securities), succeeded, len(failures), tuple(failures), quality)
 
     @staticmethod
     def _normalize(
