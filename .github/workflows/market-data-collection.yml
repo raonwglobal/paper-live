@@ -1,0 +1,108 @@
+name: Scheduled market data collection
+
+on:
+  schedule:
+    # 00:30 UTC = 07:30 ICT / 09:30 KST
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+    inputs:
+      universe:
+        description: "CSV universe path (symbol,name,market[,currency,active])"
+        required: true
+        default: "universe.csv"
+        type: string
+      start_date:
+        description: "Optional inclusive start date (YYYY-MM-DD); defaults to yesterday"
+        required: false
+        type: string
+      end_date:
+        description: "Optional inclusive end date (YYYY-MM-DD); defaults to yesterday"
+        required: false
+        type: string
+      storage:
+        description: "Storage target"
+        required: true
+        default: "auto"
+        type: choice
+        options:
+          - auto
+          - drive
+          - local
+
+permissions:
+  contents: read
+
+concurrency:
+  group: market-data-collection
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install collector
+        run: python -m pip install -e ".[yfinance]"
+
+      - name: Resolve collection parameters
+        id: params
+        shell: bash
+        env:
+          INPUT_UNIVERSE: ${{ inputs.universe }}
+          INPUT_START: ${{ inputs.start_date }}
+          INPUT_END: ${{ inputs.end_date }}
+          INPUT_STORAGE: ${{ inputs.storage }}
+          DRIVE_TOKEN: ${{ secrets.GOOGLE_DRIVE_DATA_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          universe="${INPUT_UNIVERSE:-universe.csv}"
+          if [[ ! -f "$universe" ]]; then
+            echo "::error::Universe CSV not found: $universe. Add it to the repository or provide its path via workflow_dispatch."
+            exit 1
+          fi
+          yesterday="$(date -u -d 'yesterday' +%F)"
+          start="${INPUT_START:-$yesterday}"
+          end="${INPUT_END:-$yesterday}"
+          storage="${INPUT_STORAGE:-auto}"
+          if [[ "$storage" == "auto" || -z "$storage" ]]; then
+            if [[ -n "$DRIVE_TOKEN" ]]; then storage=drive; else storage=local; fi
+          fi
+          if [[ "$storage" == "drive" && -z "$DRIVE_TOKEN" ]]; then
+            echo "::error::Drive storage requested but GOOGLE_DRIVE_DATA_ACCESS_TOKEN secret is not configured."
+            exit 1
+          fi
+          echo "universe=$universe" >> "$GITHUB_OUTPUT"
+          echo "start=$start" >> "$GITHUB_OUTPUT"
+          echo "end=$end" >> "$GITHUB_OUTPUT"
+          echo "storage=$storage" >> "$GITHUB_OUTPUT"
+
+      - name: Collect daily prices
+        env:
+          GOOGLE_DRIVE_DATA_ACCESS_TOKEN: ${{ secrets.GOOGLE_DRIVE_DATA_ACCESS_TOKEN }}
+          GOOGLE_DRIVE_DATA_SHARED_DRIVE_ID: ${{ secrets.GOOGLE_DRIVE_DATA_SHARED_DRIVE_ID }}
+          GOOGLE_DRIVE_DATA_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_DATA_FOLDER_ID }}
+        run: |
+          paper-live-collect \
+            --universe "${{ steps.params.outputs.universe }}" \
+            --start-date "${{ steps.params.outputs.start }}" \
+            --end-date "${{ steps.params.outputs.end }}" \
+            --storage "${{ steps.params.outputs.storage }}" \
+            --local-dir ./paper-live-data
+
+      - name: Upload local archive
+        if: always() && steps.params.outputs.storage == 'local'
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-data-${{ github.run_id }}
+          path: paper-live-data/
+          if-no-files-found: warn
+          retention-days: 30
