@@ -96,7 +96,9 @@ jobs:
             --start-date "${{ steps.params.outputs.start }}" \
             --end-date "${{ steps.params.outputs.end }}" \
             --storage "${{ steps.params.outputs.storage }}" \
-            --local-dir ./paper-live-data
+            --local-dir ./paper-live-data \\
+            --report-json ./reports/collection-summary.json \\
+            --report-csv ./reports/collection-failures.csv
 
       - name: Upload local archive
         if: always() && steps.params.outputs.storage == 'local'
@@ -104,5 +106,37 @@ jobs:
         with:
           name: market-data-${{ github.run_id }}
           path: paper-live-data/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Publish collection summary
+        if: always() && hashFiles('reports/collection-summary.json') != ''
+        shell: bash
+        env:
+          GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          report = json.loads(Path("reports/collection-summary.json").read_text(encoding="utf-8"))
+          status = "PASS" if report["failed"] == 0 else "PARTIAL"
+          lines = [
+              "## Market data collection",
+              f"- Status: **{status}**",
+              f"- Run ID: `{report['run_id']}`",
+              f"- Date range: {report['start_date']} to {report['end_date']}",
+              f"- Rows archived: {report['row_count']}",
+              f"- Securities: {report['succeeded']}/{report['requested']} succeeded; {report['failed']} failed",
+          ]
+          Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+          PY
+
+      - name: Upload collection reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: collection-reports-${{ github.run_id }}
+          path: reports/
           if-no-files-found: warn
           retention-days: 30
