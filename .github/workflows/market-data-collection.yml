@@ -128,8 +128,12 @@ jobs:
               f"- Date range: {report['start_date']} to {report['end_date']}",
               f"- Rows archived: {report['row_count']}",
               f"- Securities: {report['succeeded']}/{report['requested']} succeeded; {report['failed']} failed",
+              f"- Quality: {'PASS' if report.get('quality', {}).get('passed', True) else 'FAIL'}",
+              f"- Quality rows: {report.get('quality', {}).get('row_count', 'n/a')}",
+              f"- Duplicate rows: {report.get('quality', {}).get('duplicate_count', 'n/a')}",
+              f"- Invalid rows: {report.get('quality', {}).get('invalid_count', 'n/a')}",
           ]
-          Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+          Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\n".join(lines) + "\n", encoding="utf-8")
           PY
 
       - name: Upload collection reports
