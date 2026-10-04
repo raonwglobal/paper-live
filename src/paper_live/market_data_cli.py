@@ -40,7 +40,7 @@ def main() -> int:
     parser.add_argument("--end-date", required=True, type=date.fromisoformat)
     parser.add_argument("--dataset", default="market/daily-prices")
     parser.add_argument("--run-id", default=None)
-    parser.add_argument("--storage", choices=("drive", "local"), default="drive")
+    parser.add_argument("--storage", choices=("auto", "drive", "local"), default="auto")
     parser.add_argument("--local-dir", default="./paper-live-data")
     parser.add_argument("--drive-folder-id", default=os.getenv("GOOGLE_DRIVE_DATA_FOLDER_ID"))
     parser.add_argument("--report-json", default=None, help="Write a machine-readable run summary")
@@ -50,8 +50,12 @@ def main() -> int:
         parser.error("--end-date must be on or after --start-date")
 
     universe = _load_universe(args.universe)
+    storage_target = args.storage
+    if storage_target == "auto":
+        storage_target = "drive" if os.getenv("GOOGLE_DRIVE_DATA_ACCESS_TOKEN") else "local"
+
     client: DriveClient
-    if args.storage == "local":
+    if storage_target == "local":
         client = LocalDriveMirror(args.local_dir)
     else:
         client = GoogleDriveApiClient()
@@ -82,7 +86,7 @@ def main() -> int:
             "dataset": args.dataset,
             "start_date": args.start_date.isoformat(),
             "end_date": args.end_date.isoformat(),
-            "storage": args.storage,
+            "storage": storage_target,
             "row_count": report.manifest.row_count,
             "requested": report.requested,
             "succeeded": report.succeeded,
