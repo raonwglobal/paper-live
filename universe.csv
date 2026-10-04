@@ -1,0 +1,5 @@
+symbol,name,market,currency,active
+AAPL,Apple Inc,NASDAQ,USD,true
+MSFT,Microsoft Corporation,NASDAQ,USD,true
+005930,Samsung Electronics,KOSPI,KRW,true
+000660,SK Hynix,KOSPI,KRW,true
