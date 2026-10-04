@@ -87,6 +87,14 @@ def main() -> int:
             "requested": report.requested,
             "succeeded": report.succeeded,
             "failed": report.failed,
+            "quality": {
+                "passed": report.quality.passed,
+                "row_count": report.quality.row_count,
+                "duplicate_count": report.quality.duplicate_count,
+                "invalid_count": report.quality.invalid_count,
+                "missing_close_count": report.quality.missing_close_count,
+                "date_out_of_range_count": report.quality.date_out_of_range_count,
+            },
             "failures": [
                 {"market": market, "symbol": symbol, "error": error}
                 for market, symbol, error in report.failures
@@ -104,7 +112,7 @@ def main() -> int:
                 {"market": market, "symbol": symbol, "error": error}
                 for market, symbol, error in report.failures
             )
-    return 0 if report.failed == 0 else 1
+    return 0 if report.failed == 0 and report.quality.passed else 1
 
 
 if __name__ == "__main__":
