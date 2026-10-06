@@ -47,6 +47,8 @@ def test_collect_enriches_rows_and_uses_one_provider_per_market():
     assert dataset == "market/daily-prices"
     assert partitions["2026-09-30"][0]["name"] == "Samsung"
     assert partitions["2026-09-30"][0]["market"] == "KOSPI"
+    assert partitions["2026-09-30"][0]["effective_date"] == "2026-09-30"
+    assert partitions["2026-09-30"][0]["available_at"] == "2026-09-30T23:59:59+00:00"
     assert metadata["run_id"] == "run-1"
 
 
