@@ -97,7 +97,7 @@ jobs:
             --end-date "${{ steps.params.outputs.end }}" \
             --storage "${{ steps.params.outputs.storage }}" \
             --local-dir ./paper-live-data \
-            --report-json ./reports/collection-summary.json \\
+            --report-json ./reports/collection-summary.json \
             --report-csv ./reports/collection-failures.csv
 
       - name: Upload local archive
