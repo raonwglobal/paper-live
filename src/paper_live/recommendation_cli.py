@@ -7,6 +7,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from .data_lake import DriveClient, GoogleDriveApiClient, GoogleDriveStorageAgent, LocalDriveMirror
+from .market_data_schema import validate_daily_market_schema
 from .recommendation_pipeline import RecommendationPipeline
 
 
@@ -56,6 +57,9 @@ def main() -> int:
     rows = storage.read_partitioned_jsonl(args.dataset, trade_dates=dates)
     if not rows:
         parser.error(f"no stored rows found for dataset: {args.dataset}")
+    schema_errors = validate_daily_market_schema(rows)
+    if schema_errors:
+        parser.error("market data schema validation failed: " + "; ".join(schema_errors[:10]))
 
     pipeline = RecommendationPipeline(storage=storage)
     ranked, feature_manifest, recommendation_manifest = pipeline.build_from_daily(
