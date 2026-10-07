@@ -74,6 +74,11 @@ class DailyMarketDataCollector:
         all_rows = [row for partition in partitions.values() for row in partition]
         quality = validate_daily_rows(all_rows, start_date=start_date, end_date=end_date)
         effective_as_of = as_of or end_date.isoformat()
+        available_at = f"{end_date.isoformat()}T23:59:59+00:00"
+        for partition_rows in partitions.values():
+            for row in partition_rows:
+                row["effective_date"] = row["trade_date"]
+                row["available_at"] = available_at
         manifest = self.storage.write_partitioned_jsonl(
             self.dataset,
             partitions,
