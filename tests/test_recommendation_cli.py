@@ -40,4 +40,6 @@ def test_recommendation_cli_reads_stored_partitions(tmp_path: Path, monkeypatch,
     assert main() == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["input_rows"] == 6
+    assert payload["quality"]["pit_eligible"] == 6
+    assert payload["quality"]["pit_rejected"] == 0
     assert payload["recommendation_manifest"]["dataset"] == "recommendations/daily"
