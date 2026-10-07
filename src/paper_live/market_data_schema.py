@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import datetime
 from collections.abc import Iterable, Mapping
+from datetime import date, datetime
 from typing import Any
 
 
@@ -20,7 +20,7 @@ def validate_daily_market_schema(rows: Iterable[Mapping[str, Any]]) -> tuple[str
         if not market:
             errors.append(f"row[{index}]: market is required")
         try:
-            datetime.date.fromisoformat(trade_date)
+            date.fromisoformat(trade_date)
         except ValueError:
             errors.append(f"row[{index}]: trade_date must be YYYY-MM-DD")
         effective_date = row.get("effective_date")
@@ -29,7 +29,7 @@ def validate_daily_market_schema(rows: Iterable[Mapping[str, Any]]) -> tuple[str
         available_at = row.get("available_at")
         if available_at is not None:
             try:
-                parsed = datetime.datetime.fromisoformat(str(available_at).replace("Z", "+00:00"))
+                parsed = datetime.fromisoformat(str(available_at).replace("Z", "+00:00"))
             except ValueError:
                 errors.append(f"row[{index}]: available_at must be ISO-8601")
             else:
