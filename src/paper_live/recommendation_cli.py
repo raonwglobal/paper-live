@@ -31,7 +31,12 @@ def main() -> int:
     parser.add_argument("--local-dir", default="./paper-live-data")
     parser.add_argument("--drive-folder-id", default=os.getenv("GOOGLE_DRIVE_DATA_FOLDER_ID"))
     parser.add_argument("--output-json", default=None, help="Write selected recommendations to JSON")
+    parser.add_argument("--max-pit-missing-timestamp", type=int, default=0, help="Fail when missing available_at rows exceed this count")
+    parser.add_argument("--min-latest-candidates", type=int, default=1, help="Fail when latest PIT-eligible candidates are below this count")
     args = parser.parse_args()
+
+    if args.max_pit_missing_timestamp < 0 or args.min_latest_candidates < 0:
+        parser.error("quality gate thresholds must be non-negative")
 
     try:
         decision = datetime.fromisoformat(args.decision_time.replace("Z", "+00:00"))
@@ -57,6 +62,20 @@ def main() -> int:
         rows, decision_time=decision.isoformat()
     )
     selected = [row for row in ranked if row.get("portfolio_selected")]
+    quality = {
+        "pit_eligible": pipeline.last_filter_stats.get("pit_eligible", 0),
+        "pit_rejected": pipeline.last_filter_stats.get("pit_rejected", 0),
+        "pit_missing_timestamp": pipeline.last_filter_stats.get("pit_missing_timestamp", 0),
+        "pit_future_timestamp": pipeline.last_filter_stats.get("pit_future_timestamp", 0),
+        "latest_candidates": pipeline.last_filter_stats.get("latest_candidates", 0),
+        "selected_candidates": pipeline.last_filter_stats.get("selected_candidates", 0),
+    }
+    quality["gate_max_pit_missing_timestamp"] = args.max_pit_missing_timestamp
+    quality["gate_min_latest_candidates"] = args.min_latest_candidates
+    quality["gate_passed"] = (
+        quality["pit_missing_timestamp"] <= args.max_pit_missing_timestamp
+        and quality["latest_candidates"] >= args.min_latest_candidates
+    )
     payload = {
         "dataset": args.dataset,
         "storage": target,
@@ -64,14 +83,7 @@ def main() -> int:
         "input_rows": len(rows),
         "feature_manifest": feature_manifest.__dict__,
         "recommendation_manifest": recommendation_manifest.__dict__,
-        "quality": {
-            "pit_eligible": pipeline.last_filter_stats.get("pit_eligible", 0),
-            "pit_rejected": pipeline.last_filter_stats.get("pit_rejected", 0),
-            "pit_missing_timestamp": pipeline.last_filter_stats.get("pit_missing_timestamp", 0),
-            "pit_future_timestamp": pipeline.last_filter_stats.get("pit_future_timestamp", 0),
-            "latest_candidates": pipeline.last_filter_stats.get("latest_candidates", 0),
-            "selected_candidates": pipeline.last_filter_stats.get("selected_candidates", 0),
-        },
+        "quality": quality,
         "selected": selected,
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2, default=list))
@@ -79,6 +91,16 @@ def main() -> int:
         path = Path(args.output_json)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=list) + "\n", encoding="utf-8")
+    if not quality["gate_passed"]:
+        print(
+            "recommendation quality gate failed: "
+            f"missing_timestamp={quality['pit_missing_timestamp']} "
+            f"(max {args.max_pit_missing_timestamp}), "
+            f"latest_candidates={quality['latest_candidates']} "
+            f"(min {args.min_latest_candidates})",
+            flush=True,
+        )
+        return 2
     return 0
 
 

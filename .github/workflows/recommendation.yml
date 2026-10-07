@@ -67,6 +67,8 @@ jobs:
             --storage drive \
             --dataset market/daily-prices \
             --decision-time "${{ steps.params.outputs.decision_date }}T23:59:59+00:00" \
+            --max-pit-missing-timestamp 0 \
+            --min-latest-candidates 1 \
             --output-json ./reports/recommendation-summary.json > ./reports/recommendation-output.json
 
       - name: Publish recommendation summary
@@ -86,6 +88,10 @@ jobs:
               f"- Input rows: {payload['input_rows']}",
               f"- Selected positions: {len(selected)}",
               f"- Recommendation dataset: {payload['recommendation_manifest']['dataset']}",
+              f"- Quality gate: {'PASS' if payload['quality']['gate_passed'] else 'FAIL'}",
+              f"- PIT eligible/rejected: {payload['quality']['pit_eligible']}/{payload['quality']['pit_rejected']}",
+              f"- Missing timestamps: {payload['quality']['pit_missing_timestamp']}",
+              f"- Latest candidates: {payload['quality']['latest_candidates']}",
           ]
           for row in selected[:10]:
               lines.append(
