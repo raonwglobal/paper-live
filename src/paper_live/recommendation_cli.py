@@ -52,7 +52,8 @@ def main() -> int:
     if not rows:
         parser.error(f"no stored rows found for dataset: {args.dataset}")
 
-    ranked, feature_manifest, recommendation_manifest = RecommendationPipeline(storage=storage).build_from_daily(
+    pipeline = RecommendationPipeline(storage=storage)
+    ranked, feature_manifest, recommendation_manifest = pipeline.build_from_daily(
         rows, decision_time=decision.isoformat()
     )
     selected = [row for row in ranked if row.get("portfolio_selected")]
@@ -63,6 +64,14 @@ def main() -> int:
         "input_rows": len(rows),
         "feature_manifest": feature_manifest.__dict__,
         "recommendation_manifest": recommendation_manifest.__dict__,
+        "quality": {
+            "pit_eligible": pipeline.last_filter_stats.get("pit_eligible", 0),
+            "pit_rejected": pipeline.last_filter_stats.get("pit_rejected", 0),
+            "pit_missing_timestamp": pipeline.last_filter_stats.get("pit_missing_timestamp", 0),
+            "pit_future_timestamp": pipeline.last_filter_stats.get("pit_future_timestamp", 0),
+            "latest_candidates": pipeline.last_filter_stats.get("latest_candidates", 0),
+            "selected_candidates": pipeline.last_filter_stats.get("selected_candidates", 0),
+        },
         "selected": selected,
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2, default=list))
