@@ -31,12 +31,30 @@ class SecurityMaster:
             items[key] = security
         self._items = items
 
+    def merge(self, securities: Iterable[Security]) -> None:
+        """Merge another source, rejecting conflicting duplicate definitions."""
+        merged = dict(self._items)
+        for security in securities:
+            if not security.symbol or not security.market:
+                raise ValueError("symbol and market are required")
+            key = (security.market, security.symbol)
+            existing = merged.get(key)
+            if existing is not None:
+                if existing != security:
+                    raise ValueError(f"conflicting security definition: {key}")
+                continue
+            merged[key] = security
+        self._items = merged
+
     def active(self, market: str | None = None) -> tuple[Security, ...]:
         values = [x for x in self._items.values() if x.active and (market is None or x.market == market)]
         return tuple(sorted(values, key=lambda x: (x.market, x.symbol)))
 
     def symbols(self, market: str | None = None) -> tuple[str, ...]:
         return tuple(x.symbol for x in self.active(market))
+
+    def markets(self) -> tuple[str, ...]:
+        return tuple(sorted({x.market for x in self._items.values() if x.active}))
 
     def batch(self, size: int = 200, market: str | None = None) -> tuple[tuple[Security, ...], ...]:
         if size < 1:

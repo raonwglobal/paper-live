@@ -14,28 +14,38 @@ from .universe import Security, SecurityMaster
 from .yfinance_provider import YFinanceDailyPriceProvider
 
 
-def _load_universe(path: str) -> SecurityMaster:
-    with Path(path).open(encoding="utf-8-sig", newline="") as stream:
-        reader = csv.DictReader(stream)
-        required = {"symbol", "name", "market"}
-        if not reader.fieldnames or not required.issubset(reader.fieldnames):
-            raise ValueError("universe CSV requires symbol,name,market columns")
-        securities = []
-        for row in reader:
-            active = str(row.get("active", "true")).strip().lower() not in {"0", "false", "no"}
-            securities.append(Security(
-                symbol=str(row["symbol"]).strip(),
-                name=str(row["name"]).strip(),
-                market=str(row["market"]).strip().upper(),
-                currency=str(row.get("currency") or "KRW").strip().upper(),
-                active=active,
-            ))
-    return SecurityMaster(securities)
+def _load_universe(paths: str | list[str]) -> SecurityMaster:
+    if isinstance(paths, str):
+        paths = [paths]
+    master = SecurityMaster()
+    for path in paths:
+        with Path(path).open(encoding="utf-8-sig", newline="") as stream:
+            reader = csv.DictReader(stream)
+            required = {"symbol", "name", "market"}
+            if not reader.fieldnames or not required.issubset(reader.fieldnames):
+                raise ValueError(f"universe CSV requires symbol,name,market columns: {path}")
+            securities = []
+            for row in reader:
+                active = str(row.get("active", "true")).strip().lower() not in {"0", "false", "no"}
+                securities.append(Security(
+                    symbol=str(row["symbol"]).strip(),
+                    name=str(row["name"]).strip(),
+                    market=str(row["market"]).strip().upper(),
+                    currency=str(row.get("currency") or "KRW").strip().upper(),
+                    active=active,
+                ))
+        master.merge(securities)
+    return master
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Collect daily OHLCV data for a CSV security universe")
-    parser.add_argument("--universe", required=True, help="CSV columns: symbol,name,market[,currency,active]")
+    parser = argparse.ArgumentParser(description="Collect daily OHLCV data for one or more CSV security universes")
+    parser.add_argument(
+        "--universe",
+        required=True,
+        action="append",
+        help="CSV columns: symbol,name,market[,currency,active]; repeat to merge sources",
+    )
     parser.add_argument("--start-date", required=True, type=date.fromisoformat)
     parser.add_argument("--end-date", required=True, type=date.fromisoformat)
     parser.add_argument("--dataset", default="market/daily-prices")
@@ -87,6 +97,11 @@ def main() -> int:
             "start_date": args.start_date.isoformat(),
             "end_date": args.end_date.isoformat(),
             "storage": storage_target,
+            "universe": {
+                "active_count": len(universe.active()),
+                "markets": list(universe.markets()),
+                "count_by_market": {market: len(universe.active(market)) for market in universe.markets()},
+            },
             "row_count": report.manifest.row_count,
             "requested": report.requested,
             "succeeded": report.succeeded,
@@ -104,7 +119,7 @@ def main() -> int:
                 for market, symbol, error in report.failures
             ],
         }
-        report_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+        report_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     if args.report_csv:
         report_path = Path(args.report_csv)
