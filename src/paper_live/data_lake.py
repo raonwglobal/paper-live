@@ -84,9 +84,16 @@ class GoogleDriveApiClient:
             escaped = name_prefix.replace("'", "''")
             clauses.append(f"name contains '{escaped}'")
         query = urllib.parse.quote(" and ".join(clauses))
-        url = f"https://www.googleapis.com/drive/v3/files?q={query}&fields=files(id,name,mimeType)&pageSize=1000&{self._common_params()}"
-        payload = json.loads(self._request("GET", url))
-        return tuple(payload.get("files", ()))
+        base_url = f"https://www.googleapis.com/drive/v3/files?q={query}&fields=nextPageToken,files(id,name,mimeType)&pageSize=1000&{self._common_params()}"
+        files: list[Mapping[str, str]] = []
+        page_token: str | None = None
+        while True:
+            url = base_url if page_token is None else f"{base_url}&pageToken={urllib.parse.quote(page_token)}"
+            payload = json.loads(self._request("GET", url))
+            files.extend(payload.get("files", ()))
+            page_token = payload.get("nextPageToken")
+            if not page_token:
+                return tuple(files)
 
     def download(self, file_id: str) -> bytes:
         url = f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(file_id, safe='')}?alt=media&{self._common_params()}"
