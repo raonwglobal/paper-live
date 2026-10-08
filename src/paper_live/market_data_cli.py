@@ -14,7 +14,9 @@ from .universe import Security, SecurityMaster
 from .yfinance_provider import YFinanceDailyPriceProvider
 
 
-def _load_universe(paths: list[str]) -> SecurityMaster:
+def _load_universe(paths: str | list[str]) -> SecurityMaster:
+    if isinstance(paths, str):
+        paths = [paths]
     master = SecurityMaster()
     for path in paths:
         with Path(path).open(encoding="utf-8-sig", newline="") as stream:
