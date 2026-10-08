@@ -17,3 +17,15 @@ def test_duplicate_universe_rejected():
     except ValueError:
         return
     raise AssertionError("duplicate universe should be rejected")
+
+
+def test_merge_deduplicates_identical_sources_and_rejects_conflicts():
+    master = SecurityMaster([Security("1", "A", "NASDAQ", "USD")])
+    master.merge([Security("1", "A", "NASDAQ", "USD"), Security("2", "B", "NASDAQ", "USD")])
+    assert master.symbols("NASDAQ") == ("1", "2")
+
+    try:
+        master.merge([Security("1", "Different", "NASDAQ", "USD")])
+    except ValueError:
+        return
+    raise AssertionError("conflicting source definitions should be rejected")
