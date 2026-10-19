@@ -128,7 +128,8 @@ def dashboard(request: Request, message: str = "", *, error: bool = False) -> HT
             f"<td>{escape(r.status)}</td><td><form class='inline' method='post' action='/revoke'>"
             f"<input type='hidden' name='csrf' value='{token}'>"
             f"<input type='hidden' name='secret_id' value='{escape(r.secret_id)}'>"
-            f"<button class='danger' type='submit' onclick=\"return confirm('Revoke this credential?')\">Revoke</button>"
+            "<label><input style='width:auto' type='checkbox' name='confirm' value='yes' required> Confirm</label>"
+            "<button class='danger' type='submit'>Revoke</button>"
             "</form></td></tr>"
         )
     table = (
@@ -235,11 +236,18 @@ def save(
 
 
 @app.post("/revoke", response_class=HTMLResponse)
-def revoke(request: Request, csrf: Annotated[str, Form()], secret_id: Annotated[str, Form()]) -> HTMLResponse:
+def revoke(
+    request: Request,
+    csrf: Annotated[str, Form()],
+    secret_id: Annotated[str, Form()],
+    confirm: Annotated[str, Form()],
+) -> HTMLResponse:
     if not authenticated(request):
         return login_page(request)
     if not check_csrf(request, csrf):
         return dashboard(request, "Session expired. Reload and try again.", error=True)
+    if confirm != "yes":
+        return dashboard(request, "Confirm revocation before continuing.", error=True)
     if not ID_PATTERN.fullmatch(secret_id):
         return dashboard(request, "Invalid credential ID.", error=True)
     try:
