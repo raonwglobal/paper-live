@@ -7,7 +7,6 @@ import secrets
 from datetime import datetime
 from html import escape
 from typing import Annotated
-from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
